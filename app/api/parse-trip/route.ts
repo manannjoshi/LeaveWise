@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { generateGeminiJson, GeminiError } from "@/lib/gemini";
 import type { Importance, TravelMode } from "@/lib/trip";
 
+// Give Gemini time to respond while staying within Vercel Hobby's function limit.
+export const maxDuration = 30;
+
 const schema = {
   type: "OBJECT",
   properties: {
@@ -78,7 +81,7 @@ export async function POST(request: Request) {
   ].join("\n");
 
   try {
-    const trip = await generateGeminiJson<ParsedTrip>(prompt, schema, 220);
+    const trip = await generateGeminiJson<ParsedTrip>(prompt, schema, 220, 25_000);
     if (!validParsedTrip(trip)) {
       return NextResponse.json({ error: "I couldn't confidently find two places and a future arrival time. Fill in the trip form below." }, { status: 422 });
     }

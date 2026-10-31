@@ -13,7 +13,12 @@ export class GeminiError extends Error {
   }
 }
 
-export async function generateGeminiJson<T>(prompt: string, schema: JsonSchema, maxOutputTokens = 180): Promise<T> {
+export async function generateGeminiJson<T>(
+  prompt: string,
+  schema: JsonSchema,
+  maxOutputTokens = 180,
+  timeoutMs = 25_000,
+): Promise<T> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new GeminiError("missing_key");
 
@@ -31,14 +36,16 @@ export async function generateGeminiJson<T>(prompt: string, schema: JsonSchema, 
         },
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: schema,
-          temperature: 0.1,
+          // Use Gemini's current structured JSON output format and keep this extraction quick.
+          responseFormat: {
+            text: { mimeType: "APPLICATION_JSON", schema },
+          },
+          thinkingConfig: { thinkingLevel: "LOW" },
           maxOutputTokens,
         },
       }),
       cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
     const code = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError") ? "timeout" : "network";

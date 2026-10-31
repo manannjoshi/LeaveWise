@@ -4,6 +4,9 @@ import { getLearnedSafetyMargin, validResidualsFromRequest } from "@/lib/calibra
 import { isTripRequest } from "@/lib/validate-trip";
 import { explainPlanWithGemini } from "@/lib/plan-explanation";
 
+// Route, weather, and optional AI explanation calls can take longer together.
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   let body: unknown;
   try {

@@ -42,6 +42,7 @@ export async function explainPlanWithGemini(plan: LeavePlan): Promise<string> {
       `Write one clear sentence explaining this recommendation using only these facts: ${JSON.stringify(facts)}. Do not add any new quantities, times, distances, or claims. Any digits in your sentence must match one of the supplied numeric values exactly. Do not spell numbers as words. Keep it under 25 words.`,
       schema,
       100,
+      8_000,
     );
     return safeExplanation(result?.explanation, allowedNumbers) ? result.explanation.trim() : fallback;
   } catch {
