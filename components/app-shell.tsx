@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -86,7 +86,7 @@ export function useInstallFlow() {
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
+
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIosBrowserNotInstalled, setIsIosBrowserNotInstalled] = useState(false);
@@ -260,12 +260,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
               )}
             </button>
           </div>
-          {pathname !== "/" && (
-            <button type="button" className="back-button" onClick={() => router.push("/")} aria-label="Back to plan">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h11" /></svg>
-              <span>Back</span>
-            </button>
-          )}
           {children}
         </div>
 

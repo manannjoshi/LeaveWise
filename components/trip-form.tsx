@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import type { Importance, LeavePlan, Place, TravelMode, TripRequest } from "@/lib/trip";
 import { arrivalInMinutes, arriveByValidationError, toLocalDateTimeInputValue, tomorrowAtNineLocal } from "@/lib/date-time";
-import { addTripHistoryEntry, clearActiveTrip, getCalibrationResiduals, makeTripHistoryEntry, readActiveTrip, readTripHistory, saveActiveTrip } from "@/lib/trip-history";
+import { addPlannedTrip, addTripHistoryEntry, clearActiveTrip, getCalibrationResiduals, makeTripHistoryEntry, readActiveTrip, readTripHistory, saveActiveTrip } from "@/lib/trip-history";
 import type { ActiveTrip, TripHistoryEntry } from "@/lib/trip-history";
+import { readUserPreferences, saveUserPreferences } from "@/lib/user-preferences";
+import type { UsualTrip } from "@/lib/user-preferences";
 import SaveTripButton from "@/components/save-trip-button";
 import InstallAppButton from "@/components/install-app-button";
 import ArriveByPicker from "@/components/arrive-by-picker";
@@ -110,6 +112,7 @@ export default function TripForm() {
   const [importance, setImportance] = useState<Importance>("important");
   const [buffer, setBuffer] = useState(8);
   const [plan, setPlan] = useState<LeavePlan | null>(null);
+  const [planHistoryMessage, setPlanHistoryMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [naturalText, setNaturalText] = useState("");
@@ -122,11 +125,17 @@ export default function TripForm() {
   const [arrivalLogError, setArrivalLogError] = useState("");
   const [activeTrip, setActiveTrip] = useState<ActiveTrip | null>(null);
   const [recentRoutes, setRecentRoutes] = useState<TripHistoryEntry[]>([]);
+  const [usualTrip, setUsualTrip] = useState<UsualTrip | null>(null);
   const [locationBusy, setLocationBusy] = useState(false);
   const [locationError, setLocationError] = useState("");
   const [clock, setClock] = useState(Date.now());
 
   useEffect(() => {
+    const preferences = readUserPreferences();
+    setMode(preferences.travelMode);
+    setImportance(preferences.importance);
+    setBuffer(preferences.fixedBuffers[preferences.travelMode]);
+    setUsualTrip(preferences.usualTrip);
     const savedTrip = readActiveTrip();
     if (savedTrip) {
       setActiveTrip(savedTrip);
@@ -159,7 +168,7 @@ export default function TripForm() {
 
   function changeMode(nextMode: TravelMode) {
     setMode(nextMode);
-    setBuffer(nextMode === "car" ? 8 : nextMode === "two-wheeler" ? 5 : 0);
+    setBuffer(readUserPreferences().fixedBuffers[nextMode]);
   }
 
   async function fillFromDescription() {
@@ -227,6 +236,7 @@ export default function TripForm() {
     event.preventDefault();
     setError("");
     setPlan(null);
+    setPlanHistoryMessage("");
     setArrivalLogMessage("");
     setArrivalLogError("");
     const timeError = arriveByValidationError(arriveBy);
@@ -254,6 +264,8 @@ export default function TripForm() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Could not plan this trip.");
+      const savedToHistory = addPlannedTrip(body, data);
+      setPlanHistoryMessage(savedToHistory ? "Saved to Trips on this device." : "Could not save this plan to Trips on this device.");
       setPlan(data);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not plan this trip.");
@@ -348,6 +360,35 @@ export default function TripForm() {
     setPlan(null);
   }
 
+  function saveAsUsualTrip() {
+    if (!origin || !destination) return;
+    const preferences = readUserPreferences();
+    const usualTrip = { origin, destination };
+    const saved = saveUserPreferences({ ...preferences, usualTrip });
+    if (saved) {
+      setUsualTrip(usualTrip);
+      setPlanHistoryMessage("Usual trip saved on this device.");
+    } else {
+      setPlanHistoryMessage("Could not save your usual trip on this device.");
+    }
+  }
+
+  function useUsualTrip() {
+    if (!usualTrip) return;
+    setOrigin(usualTrip.origin);
+    setOriginText(usualTrip.origin.label);
+    setDestination(usualTrip.destination);
+    setDestinationText(usualTrip.destination.label);
+    setPlan(null);
+    setError("");
+    setGeocodingSource(null);
+    setNeedsOriginConfirmation(false);
+    setParseMessage("");
+  }
+
+  const usualTripIsCurrent = Boolean(usualTrip && origin && destination &&
+    usualTrip.origin.lat === origin.lat && usualTrip.origin.lon === origin.lon &&
+    usualTrip.destination.lat === destination.lat && usualTrip.destination.lon === destination.lon);
   function chooseArrivalTime(value: string) {
     setArriveBy(value);
     setArriveByError("");
@@ -412,6 +453,14 @@ export default function TripForm() {
           <span className="text-sm font-semibold text-slate-500">Or fill it in</span>
           <span className="h-px flex-1 bg-slate-200" />
         </div>
+        {usualTrip && (
+          <div>
+            <p className="mb-2 text-sm font-semibold">My usual trip</p>
+            <button type="button" onClick={useUsualTrip} className="recent-route min-h-11 max-w-full rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-950">
+              <span className="place-name">{usualTrip.origin.label}</span><span aria-hidden="true"> → </span><span className="place-name">{usualTrip.destination.label}</span>
+            </button>
+          </div>
+        )}
         {recentRoutes.length > 0 && (
           <div>
             <p className="mb-2 text-sm font-semibold">Repeat a recent trip</p>
@@ -537,6 +586,7 @@ export default function TripForm() {
           <p className="text-sm font-medium text-emerald-200">Recommended leave time</p>
           <p className="leave-time-value">{prettyTime(plan.leaveAt)}</p>
           <p className="mt-3 text-emerald-100">Arrive by {prettyTime(plan.arriveBy)} | {plan.durationMinutes} min expected travel</p>
+          {planHistoryMessage && <p role="status" className="mt-2 text-sm text-emerald-100">{planHistoryMessage}</p>}
           <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label={plan.safetyMarginMethod === "learned" ? `Safety margin, learned (${plan.safetyMarginSampleCount})` : "Safety margin"} value={`${plan.safetyMarginMinutes} min`} />
             <Stat label="Fixed buffer" value={`${plan.fixedBufferMinutes} min`} />
@@ -563,6 +613,9 @@ export default function TripForm() {
             )}
             {arrivalLogError && <p role="alert" className="mt-2 text-sm text-rose-200">{arrivalLogError}</p>}
           </section>
+          <button type="button" onClick={saveAsUsualTrip} disabled={usualTripIsCurrent} className="mt-3 min-h-11 w-full rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-70">
+            {usualTripIsCurrent ? "Saved as my usual trip" : "Save as my usual trip"}
+          </button>
           {!activeTrip && <SaveTripButton historyResiduals={getCalibrationResiduals(readTripHistory())} trip={{
             origin: origin!,
             destination: destination!,

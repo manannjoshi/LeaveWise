@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { calculateEvaluation, tripHistoryToCsv } from "@/lib/evaluation";
-import { readTripHistory } from "@/lib/trip-history";
-import type { TripHistoryEntry } from "@/lib/trip-history";
+import { readPlannedTrips, readTripHistory } from "@/lib/trip-history";
+import type { PlannedTripEntry, TripHistoryEntry } from "@/lib/trip-history";
 
 function formatRate(value: number | null) {
-  return value === null ? "—" : `${value.toFixed(1)}%`;
+  return value === null ? "Not available" : `${value.toFixed(1)}%`;
 }
 
 function formatError(value: number | null) {
-  if (value === null) return "—";
+  if (value === null) return "Not available";
   const rounded = value.toFixed(1);
   return `${value > 0 ? "+" : ""}${rounded} min`;
 }
@@ -19,11 +19,17 @@ function formatDate(value: string) {
   return new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
+function formatTime(value: string) {
+  return new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
 export default function EvaluationDashboard() {
   const [entries, setEntries] = useState<TripHistoryEntry[]>([]);
+  const [plannedTrips, setPlannedTrips] = useState<PlannedTripEntry[]>([]);
 
   useEffect(() => {
     setEntries(readTripHistory());
+    setPlannedTrips(readPlannedTrips());
   }, []);
 
   const metrics = calculateEvaluation(entries);
@@ -54,6 +60,25 @@ export default function EvaluationDashboard() {
           </button>
         </div>
 
+        <section className="mt-6 overflow-hidden rounded-2xl bg-white" aria-label="Planned trips">
+          <div className="border-b border-slate-200 px-4 py-4 sm:px-6">
+            <h2 className="font-semibold">Planned trips ({plannedTrips.length})</h2>
+          </div>
+          {plannedTrips.length === 0 ? (
+            <p className="px-4 py-8 text-sm text-slate-600 sm:px-6">Trips you calculate will appear here.</p>
+          ) : (
+            <ul>
+              {[...plannedTrips].reverse().map((entry) => (
+                <li key={entry.id} className="border-t border-slate-200 px-4 py-4 sm:px-6">
+                  <p className="font-semibold">{entry.trip.origin.label} → {entry.trip.destination.label}</p>
+                  <p className="mt-1 text-sm text-slate-500">{formatDate(entry.plannedAt)} · {entry.trip.mode} · {entry.plan.source === "tomtom" ? "Live estimate" : "Sample estimate"}</p>
+                  <p className="mt-2 text-sm">Leave at {formatTime(entry.plan.leaveAt)} · arrive by {formatTime(entry.trip.arriveBy)}</p>
+                  <p className="mt-1 text-sm text-slate-500">{entry.plan.durationMinutes} min expected travel</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
         <section aria-label="Evaluation metrics" className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Metric label="App on-time rate" value={formatRate(metrics.appOnTimeRate)} />
           <Metric label="Baseline on-time rate" value={formatRate(metrics.baselineOnTimeRate)} />
@@ -66,7 +91,7 @@ export default function EvaluationDashboard() {
           {metrics.excludedMockCount > 0 && ` ${metrics.excludedMockCount} sample-route log${metrics.excludedMockCount === 1 ? " was" : "s were"} excluded from the raw-API baseline.`}
           {" "}Arrival error is actual duration minus the time budget each recommendation allowed; positive means late, zero or negative means on time. This comparison assumes each strategy starts at its recommended time and the logged duration applies.
         </p>
-        <p className="mt-2 text-sm text-slate-500">Logs are stored in this browser only. Use Export CSV to save a report or backup.</p>
+        <p className="mt-2 text-sm text-slate-500">Planned trips and completed logs are stored on this device. Use Export CSV to save completed logs.</p>
 
         <section className="mt-6 overflow-hidden rounded-2xl bg-white">
           <div className="border-b border-slate-200 px-4 py-4 sm:px-6">
