@@ -6,4 +6,6 @@ out/
 .env*
 !.env.example
 FORLLMS.TXT
+.agents/
+.specify/
 npm-debug.log*
