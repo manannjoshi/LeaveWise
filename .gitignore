@@ -9,3 +9,6 @@ FORLLMS.TXT
 .agents/
 .specify/
 npm-debug.log*
+
+.vercel
+.env*

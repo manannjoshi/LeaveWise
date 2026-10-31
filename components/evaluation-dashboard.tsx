@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { calculateEvaluation, tripHistoryToCsv } from "@/lib/evaluation";
+import { calculateEvaluation } from "@/lib/evaluation";
 import { readPlannedTrips, readTripHistory } from "@/lib/trip-history";
 import type { PlannedTripEntry, TripHistoryEntry } from "@/lib/trip-history";
 
@@ -34,30 +34,14 @@ export default function EvaluationDashboard() {
 
   const metrics = calculateEvaluation(entries);
 
-  function exportCsv() {
-    if (!entries.length) return;
-    const blob = new Blob([tripHistoryToCsv(entries)], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `leave-on-time-trip-logs-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
   return (
     <main className="px-4 py-5">
       <div className="mx-auto max-w-5xl">
-        <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
+        <div className="mt-6">
           <div>
             <h1 className="mt-2">Trips</h1>
             <p className="mt-2 max-w-2xl text-slate-600">Compare the app recommendation with raw ETA + 10 minutes using the actual duration you logged.</p>
           </div>
-          <button type="button" onClick={exportCsv} disabled={!entries.length} className="min-h-11 bg-emerald-900 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50">
-            Export CSV
-          </button>
         </div>
 
         <section className="mt-6 overflow-hidden rounded-2xl bg-white" aria-label="Planned trips">
@@ -91,7 +75,7 @@ export default function EvaluationDashboard() {
           {metrics.excludedMockCount > 0 && ` ${metrics.excludedMockCount} sample-route log${metrics.excludedMockCount === 1 ? " was" : "s were"} excluded from the raw-API baseline.`}
           {" "}Arrival error is actual duration minus the time budget each recommendation allowed; positive means late, zero or negative means on time. This comparison assumes each strategy starts at its recommended time and the logged duration applies.
         </p>
-        <p className="mt-2 text-sm text-slate-500">Planned trips and completed logs are stored on this device. Use Export CSV to save completed logs.</p>
+        <p className="mt-2 text-sm text-slate-500">Planned trips and completed logs are stored on this device.</p>
 
         <section className="mt-6 overflow-hidden rounded-2xl bg-white">
           <div className="border-b border-slate-200 px-4 py-4 sm:px-6">

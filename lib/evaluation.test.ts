@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateEvaluation, tripHistoryToCsv } from "./evaluation.ts";
+import { calculateEvaluation } from "./evaluation.ts";
 import type { TripHistoryEntry } from "./trip-history.ts";
 
 function sampleEntry(overrides: Partial<TripHistoryEntry> = {}): TripHistoryEntry {
@@ -46,10 +46,4 @@ test("compares live route logs and excludes mocked routes from the API baseline"
   assert.equal(metrics.baselineOnTimeRate, 50);
   assert.equal(metrics.appMeanArrivalErrorMinutes, -5);
   assert.equal(metrics.baselineMeanArrivalErrorMinutes, 5);
-});
-
-test("exports all trip logs as escaped CSV", () => {
-  const csv = tripHistoryToCsv([sampleEntry({ origin: 'Hall, "A"' })]);
-  assert.match(csv, /"Hall, ""A"""/);
-  assert.match(csv, /"Raw ETA \(min\)","Baseline fixed buffer \(min\)"/);
 });

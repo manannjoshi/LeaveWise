@@ -14,7 +14,7 @@ The app is built as an installable Progressive Web App (PWA). It has no user acc
 - Optional natural-language trip entry and concise explanations through Groq.
 - A one-tap option to use the device’s current location when a trip description has no origin. The browser asks for location permission only after the user taps the option.
 - Optional trip reminders with Web Push, VAPID, Supabase, and a protected scheduled recheck endpoint.
-- Trip-duration logging, learned safety margins, recommendation evaluation, and CSV export.
+- Trip-duration logging, learned safety margins, and recommendation evaluation.
 - PWA manifest, icons, and service worker.
 
 ## Technology
@@ -148,7 +148,7 @@ When a trip is saved, the app schedules checks at T-60, T-30, and T-15 minutes b
 
 The user can tap **I left · start timer** and **I arrived** to log actual duration. These personal logs are stored in the current browser’s local storage; they are not synced between devices or linked to an account.
 
-Open `/evaluation` to compare the app recommendation with a baseline of raw TomTom ETA plus a fixed 10-minute buffer. The page reports on-time rate and mean error using completed live-route logs. The CSV export includes saved logs for a project report; sample-route entries are marked as sample and excluded from live-route metrics.
+Open `/evaluation` to compare the app recommendation with a baseline of raw TomTom ETA plus a fixed 10-minute buffer. The page reports on-time rate and mean error using completed live-route logs. Sample-route entries are marked as sample and excluded from live-route metrics.
 
 ## Project structure
 
@@ -163,14 +163,14 @@ Open `/evaluation` to compare the app recommendation with a baseline of raw TomT
 | `app/api/cron/rechecks/route.ts` | Protected scheduled recheck endpoint. |
 | `components/trip-form.tsx` | Mobile-first form, location flow, result card, and trip timer. |
 | `components/save-trip-button.tsx` | Push permission and save-trip controls. |
-| `components/evaluation-dashboard.tsx` | Evaluation metrics and CSV download. |
+| `components/evaluation-dashboard.tsx` | Evaluation metrics. |
 | `lib/leave-time.ts` | Pure leave-time and buffer calculation. |
 | `lib/plan-trip.ts` | Routing, weather lookup, fallback, and plan assembly. |
 | `lib/groq.ts` | Server-only Groq REST helper; no Groq SDK dependency. |
 | `lib/plan-explanation.ts` | AI explanation with numeric validation and fallback. |
 | `lib/trip-history.ts` | Browser history and active-trip storage. |
 | `lib/calibration.ts` | Learned safety margin from completed trip residuals. |
-| `lib/evaluation.ts` | Baseline metrics and CSV generation. |
+| `lib/evaluation.ts` | Baseline metric calculations. |
 | `lib/weather.ts` | Rain forecast interpretation and penalty rules. |
 | `public/manifest.json` | PWA name and installation settings. |
 | `public/sw.js` | Service worker for basic offline page loading and push events. |
@@ -184,7 +184,7 @@ Run the existing unit tests with:
 npm test
 ```
 
-The tests cover leave-time math, date-time helpers, weather, calibration, trip history, and evaluation/export. Build the production app with:
+The tests cover leave-time math, date-time helpers, weather, calibration, trip history, and evaluation. Build the production app with:
 
 ```bash
 npm run build
@@ -202,7 +202,7 @@ npm run build
 - Check that car trips show no added rain penalty and that walking/two-wheeler trips add the configured penalty when rain is forecast.
 - Start and finish a trip timer; confirm the actual duration is recorded.
 - After at least five completed live-route trips, check that the learned safety margin is used.
-- Open `/evaluation`, compare metrics, and download the CSV.
+- Open `/evaluation` and compare the metrics.
 - For push testing, verify Supabase, VAPID, and cron configuration first; test on Android and an installed iPhone Home Screen web app.
 
 ## Deployment on Vercel
