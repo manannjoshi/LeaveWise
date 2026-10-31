@@ -20,7 +20,7 @@ export class GroqError extends Error {
 export async function generateGroqJson<T>(
   prompt: string,
   schema: JsonSchema,
-  maxOutputTokens = 180,
+  maxOutputTokens = 1_000,
   timeoutMs = 12_000,
 ): Promise<T> {
   const apiKey = process.env.GROQ_API_KEY;
@@ -47,6 +47,8 @@ export async function generateGroqJson<T>(
           },
           { role: "user", content: prompt },
         ],
+        // GPT-OSS supports low reasoning effort; leave most output tokens for the JSON itself.
+        reasoning_effort: "low",
         max_completion_tokens: maxOutputTokens,
         // The server validates every field itself; JSON mode avoids strict schema request rejections.
         response_format: { type: "json_object" },

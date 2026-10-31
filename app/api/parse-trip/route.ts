@@ -82,7 +82,7 @@ export async function POST(request: Request) {
   ].join("\n");
 
   try {
-    const trip = await generateGroqJson<ParsedTrip>(prompt, schema, 220, 12_000);
+    const trip = await generateGroqJson<ParsedTrip>(prompt, schema, 1_000, 12_000);
     if (!validParsedTrip(trip)) {
       return NextResponse.json({ error: "I couldn't confidently find two places and a future arrival time. Fill in the trip form below." }, { status: 422 });
     }
