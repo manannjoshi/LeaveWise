@@ -1,10 +1,11 @@
-import { generateGeminiJson } from "@/lib/gemini";
+import { generateGroqJson } from "@/lib/groq";
 import type { LeavePlan } from "@/lib/trip";
 
 const schema = {
-  type: "OBJECT",
-  properties: { explanation: { type: "STRING" } },
+  type: "object",
+  properties: { explanation: { type: "string" } },
   required: ["explanation"],
+  additionalProperties: false,
 };
 
 // Accept only a short line that uses numbers already calculated by the server.
@@ -17,9 +18,9 @@ function safeExplanation(value: unknown, allowedNumbers: number[]): value is str
   return numericTokens.every((token) => allowedNumbers.some((number) => Number(token.replace("%", "")) === number));
 }
 
-export async function explainPlanWithGemini(plan: LeavePlan): Promise<string> {
+export async function explainPlanWithGroq(plan: LeavePlan): Promise<string> {
   const fallback = plan.explanation;
-  if (!process.env.GEMINI_API_KEY) return fallback;
+  if (!process.env.GROQ_API_KEY) return fallback;
 
   const facts = {
     travelMinutes: plan.durationMinutes,
@@ -38,7 +39,7 @@ export async function explainPlanWithGemini(plan: LeavePlan): Promise<string> {
   ];
 
   try {
-    const result = await generateGeminiJson<{ explanation: string }>(
+    const result = await generateGroqJson<{ explanation: string }>(
       `Write one clear sentence explaining this recommendation using only these facts: ${JSON.stringify(facts)}. Do not add any new quantities, times, distances, or claims. Any digits in your sentence must match one of the supplied numeric values exactly. Do not spell numbers as words. Keep it under 25 words.`,
       schema,
       100,

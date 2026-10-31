@@ -349,7 +349,7 @@ export default function TripForm() {
           >
             {parsing ? "Reading your trip…" : "Fill trip details"}
           </button>
-          <p className="mt-2 text-xs text-emerald-900/80">Your sentence and timezone go to Gemini to fill the form. Review the details and select both places before planning.</p>
+          <p className="mt-2 text-xs text-emerald-900/80">Your sentence and timezone go to Groq to fill the form. Review the details and select both places before planning.</p>
           {parseMessage && <p role="status" className="mt-2 text-sm font-medium text-emerald-900">{parseMessage}</p>}
           {parseError && <p role="alert" className="mt-2 text-sm font-medium text-red-700">{parseError}</p>}
         </section>

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { planTrip } from "@/lib/plan-trip";
 import { getLearnedSafetyMargin, validResidualsFromRequest } from "@/lib/calibration";
 import { isTripRequest } from "@/lib/validate-trip";
-import { explainPlanWithGemini } from "@/lib/plan-explanation";
+import { explainPlanWithGroq } from "@/lib/plan-explanation";
 
 // Route, weather, and optional AI explanation calls can take longer together.
 export const maxDuration = 60;
@@ -28,6 +28,6 @@ export async function POST(request: Request) {
   const calibration = getLearnedSafetyMargin(residuals, body.importance);
   const plan = await planTrip(body, calibration);
   // AI wording is optional; the calculation and fallback explanation are deterministic.
-  plan.explanation = await explainPlanWithGemini(plan);
+  plan.explanation = await explainPlanWithGroq(plan);
   return NextResponse.json(plan);
 }

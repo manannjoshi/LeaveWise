@@ -1,20 +1,21 @@
 import { NextResponse } from "next/server";
-import { generateGeminiJson, GeminiError } from "@/lib/gemini";
+import { generateGroqJson, GroqError } from "@/lib/groq";
 import type { Importance, TravelMode } from "@/lib/trip";
 
-// Give Gemini time to respond while staying within Vercel Hobby's function limit.
+// Keep the AI request within Vercel Hobby's function limit.
 export const maxDuration = 30;
 
 const schema = {
-  type: "OBJECT",
+  type: "object",
   properties: {
-    origin: { type: "STRING" },
-    destination: { type: "STRING" },
-    arriveBy: { type: "STRING", description: "RFC3339 date and time with timezone offset, or empty when missing." },
-    mode: { type: "STRING", enum: ["car", "two-wheeler", "walk"] },
-    importance: { type: "STRING", enum: ["casual", "important", "critical"] },
+    origin: { type: "string" },
+    destination: { type: "string" },
+    arriveBy: { type: "string", description: "RFC3339 date and time with timezone offset, or empty when missing." },
+    mode: { type: "string", enum: ["car", "two-wheeler", "walk"] },
+    importance: { type: "string", enum: ["casual", "important", "critical"] },
   },
   required: ["origin", "destination", "arriveBy", "mode", "importance"],
+  additionalProperties: false,
 };
 
 type ParsedTrip = {
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
   if (typeof input.text !== "string" || input.text.trim().length < 8 || input.text.length > 500 || !validTimeZone(input.timeZone)) {
     return NextResponse.json({ error: "Enter a short trip description (up to 500 characters)." }, { status: 400 });
   }
-  if (!process.env.GEMINI_API_KEY) {
+  if (!process.env.GROQ_API_KEY) {
     return NextResponse.json({ error: "AI trip entry is not configured yet. Fill in the trip form below." }, { status: 503 });
   }
 
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
   ].join("\n");
 
   try {
-    const trip = await generateGeminiJson<ParsedTrip>(prompt, schema, 220, 25_000);
+    const trip = await generateGroqJson<ParsedTrip>(prompt, schema, 220, 12_000);
     if (!validParsedTrip(trip)) {
       return NextResponse.json({ error: "I couldn't confidently find two places and a future arrival time. Fill in the trip form below." }, { status: 422 });
     }
@@ -89,16 +90,16 @@ export async function POST(request: Request) {
       trip: { ...trip, origin: trip.origin.trim(), destination: trip.destination.trim() },
     });
   } catch (error) {
-    const code = error instanceof GeminiError ? error.code : "unexpected";
-    const status = error instanceof GeminiError ? error.status : undefined;
+    const code = error instanceof GroqError ? error.code : "unexpected";
+    const status = error instanceof GroqError ? error.status : undefined;
     // Keep diagnostics useful without logging the API key or the user's location text.
-    console.error("Gemini trip parsing failed", { code, status });
+    console.error("Groq trip parsing failed", { code, status });
 
-    let message = "Gemini couldn't read that trip right now. Your normal trip form is ready below.";
-    if (status === 401 || status === 403) message = "Gemini rejected the API key or its access. Check the Vercel key and Google AI Studio access.";
-    else if (status === 429) message = "Gemini's request limit was reached. Try again later or check the key's quota.";
-    else if (status === 400 || status === 404) message = "Gemini rejected the request setup. Check the latest Vercel runtime log for the status.";
-    else if (code === "timeout" || code === "network") message = "Gemini did not respond in time. Check the connection and try again.";
+    let message = "Groq couldn't read that trip right now. Your normal trip form is ready below.";
+    if (status === 401 || status === 403) message = "Groq rejected the API key or its access. Check GROQ_API_KEY in Vercel.";
+    else if (status === 429) message = "Groq's request limit was reached. Try again later or check your Groq limits.";
+    else if (status === 400 || status === 404) message = "Groq rejected the request setup. Check the latest Vercel runtime log for the status.";
+    else if (code === "timeout" || code === "network") message = "Groq did not respond in time. Check the connection and try again.";
 
     return NextResponse.json({ error: `${message} You can still use the trip form below.` }, { status: 502 });
   }

@@ -22,7 +22,7 @@ If PowerShell says it cannot find `npm-cli.js`, repair/reinstall Node.js LTS and
 - `next.config.ts` — Next.js configuration (kept minimal for this project).
 - `postcss.config.mjs` — connects Tailwind CSS to Next.js through PostCSS.
 - `.gitignore` — keeps generated files and private environment keys out of Git.
-- `.env.example` — lists the optional Gemini, TomTom, Supabase, VAPID, and cron server settings; copy it to `.env.local`.
+- `.env.example` — lists the optional Groq, TomTom, Supabase, VAPID, and cron server settings; copy it to `.env.local`.
 - `public/manifest.json` — the app name and display settings used when installed from a browser.
 - `public/icon.svg` — the simple install icon shown by browsers.
 - `public/sw.js` — caches the app page for basic offline page loading.
@@ -43,15 +43,15 @@ If PowerShell says it cannot find `npm-cli.js`, repair/reinstall Node.js LTS and
 - `lib/leave-time.test.ts` — unit tests that provide mock travel durations without network calls.
 - `lib/calibration.test.ts`, `lib/trip-history.test.ts`, and `lib/evaluation.test.ts` — tests for learned margins, trip logging, evaluation, and CSV export.
 - `app/api/places/route.ts` — server-side TomTom place suggestions, with an offline sample fallback.
-- `app/api/parse-trip/route.ts` — asks Gemini to extract trip fields, then validates every field before returning it.
+- `app/api/parse-trip/route.ts` — asks Groq to extract trip fields, then validates every field before returning it.
 - `app/api/leave-time/route.ts` — validates trip input, refines departure estimates, and returns a live or sample plan.
 - `app/api/trips/route.ts` — saves a trip, its browser push subscription, and the three reminder checkpoints.
 - `app/api/push/vapid-public-key/route.ts` — gives the browser the public VAPID key; the private key stays server-side.
 - `app/api/cron/rechecks/route.ts` — bearer-protected cron handler that claims due checks, replans, and sends notifications.
 - `components/save-trip-button.tsx` — asks for notification permission and saves the current trip.
 - `lib/plan-trip.ts` — shared server-side planner used by the form API and scheduled re-checks.
-- `lib/gemini.ts` — small server-only Gemini REST client; no extra SDK dependency is needed.
-- `lib/plan-explanation.ts` — asks Gemini to phrase the result from server-calculated numbers and falls back if output is unsafe.
+- `lib/groq.ts` — small server-only Groq REST client; no extra SDK dependency is needed.
+- `lib/plan-explanation.ts` — asks Groq to phrase the result from server-calculated numbers and falls back if output is unsafe.
 - `lib/validate-trip.ts` — validates trip coordinates, travel mode, importance, and optional buffer.
 - `lib/supabase-admin.ts` — creates a server-only Supabase client using the secret key.
 - `lib/push-server.ts` — configures VAPID signing for server-side Web Push.
@@ -67,7 +67,7 @@ The arrive-by field keeps the browser-native date/time picker and adds one-tap r
 
 For selected real places, the server also requests hourly rain and showers from Open-Meteo at the origin around the planned leave time. Rain adds six minutes for walking and two-wheeler trips; car trips receive no extra rain penalty. A missing forecast adds no penalty. Open-Meteo's free API permits educational non-commercial use, is rate limited, and requires CC BY 4.0 attribution; the app credits it in the page footer.
 
-The optional natural-language box sends the trip sentence and the device timezone to the server, which calls Gemini using `GEMINI_API_KEY`. Gemini returns only place names, a future arrival timestamp, travel mode, and importance; the server validates those fields and the user still chooses real place suggestions before planning. If parsing fails or the key is missing, the normal form remains available. Gemini may also rephrase the result explanation from the server's calculated values; the app rejects unapproved numeric claims and keeps its deterministic explanation as a fallback. Add the Gemini key only as a server-side Vercel environment variable, never as `NEXT_PUBLIC_*`.
+The optional natural-language box sends the trip sentence and the device timezone to the server, which calls Groq using `GROQ_API_KEY`. Groq returns only place names, a future arrival timestamp, travel mode, and importance; the server validates those fields and the user still chooses real place suggestions before planning. If parsing fails or the key is missing, the normal form remains available. Groq may also rephrase the result explanation from the server's calculated values; the app rejects unapproved numeric claims and keeps its deterministic explanation as a fallback. Add the Groq key only as a server-side Vercel environment variable, never as `NEXT_PUBLIC_*`.
 
 Run the calculation tests with `npm test` (or `node --experimental-strip-types --test` on Node.js 22+).
 
@@ -92,9 +92,9 @@ Only future checkpoints are scheduled when a trip is saved. After each re-check,
 
 Create or sign into a TomTom account, open **API & SDK Keys**, and copy the key TomTom has created for you. Put it in `.env.local` as `TOMTOM_API_KEY=...`; do not prefix it with `NEXT_PUBLIC_`. TomTom's current key instructions are [here](https://docs.tomtom.com/platform/documentation/my-tomtom/how-to-get-a-tomtom-api-key).
 
-## Optional Gemini key
+## Optional Groq key
 
-To enable natural-language trip entry and AI-written explanations, create a Gemini API key in [Google AI Studio](https://aistudio.google.com/app/apikey) and set `GEMINI_API_KEY=...` in `.env.local` or Vercel's server-side environment variables. The app calls Gemini from API routes only. Without this key, the manual trip form and deterministic explanation still work.
+To enable natural-language trip entry and AI-written explanations, create an API key in [GroqCloud](https://console.groq.com/keys) and set `GROQ_API_KEY=...` in `.env.local` or Vercel's server-side environment variables. The app calls Groq from API routes only. Without this key, the manual trip form and deterministic explanation still work.
 
 ## Manual checks
 
