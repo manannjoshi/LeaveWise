@@ -97,6 +97,10 @@ export default function TripForm() {
   const [plan, setPlan] = useState<LeavePlan | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [naturalText, setNaturalText] = useState("");
+  const [parsing, setParsing] = useState(false);
+  const [parseMessage, setParseMessage] = useState("");
+  const [parseError, setParseError] = useState("");
   const [geocodingSource, setGeocodingSource] = useState<"tomtom" | "mock" | null>(null);
   const [arrivalLogMessage, setArrivalLogMessage] = useState("");
   const [arrivalLogError, setArrivalLogError] = useState("");
@@ -140,6 +144,47 @@ export default function TripForm() {
   function changeMode(nextMode: TravelMode) {
     setMode(nextMode);
     setBuffer(nextMode === "car" ? 8 : nextMode === "two-wheeler" ? 5 : 0);
+  }
+
+  async function fillFromDescription() {
+    setParseError("");
+    setParseMessage("");
+    const text = naturalText.trim();
+    if (text.length < 8) {
+      setParseError("Add a little more detail, like where you’re going and when you need to arrive.");
+      return;
+    }
+
+    setParsing(true);
+    try {
+      const response = await fetch("/api/parse-trip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Could not read that trip. Fill in the form below.");
+      if (!data.trip || typeof data.trip.origin !== "string" || typeof data.trip.destination !== "string" || !data.trip.arriveBy) {
+        throw new Error("Could not find both places and an arrival time. Fill in the form below.");
+      }
+
+      setOrigin(null);
+      setDestination(null);
+      setOriginText(data.trip.origin);
+      setDestinationText(data.trip.destination);
+      setArriveBy(toLocalDateTimeInputValue(new Date(data.trip.arriveBy)));
+      setArriveByError("");
+      changeMode(data.trip.mode);
+      setImportance(data.trip.importance);
+      setPlan(null);
+      setError("");
+      setGeocodingSource(null);
+      setParseMessage("Trip details filled in. Choose a place suggestion for each location, then review the time.");
+    } catch (reason) {
+      setParseError(reason instanceof Error ? reason.message : "Could not read that trip. Fill in the form below.");
+    } finally {
+      setParsing(false);
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -285,6 +330,35 @@ export default function TripForm() {
       )}
       <form onSubmit={submit} className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
         <fieldset disabled={Boolean(activeTrip)} className="space-y-5 disabled:opacity-70">
+        <section className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 sm:p-5" aria-labelledby="quick-trip-title">
+          <label id="quick-trip-title" className="block text-base font-bold text-emerald-950" htmlFor="naturalTrip">Describe your trip</label>
+          <p className="mt-1 text-sm text-emerald-900">For example: “Be at the airport by 6am Friday from my hostel.”</p>
+          <textarea
+            id="naturalTrip"
+            className={`${inputClass} mt-3 min-h-24 resize-y border-emerald-200 bg-white`}
+            value={naturalText}
+            maxLength={500}
+            placeholder="Where are you going, and when do you need to arrive?"
+            onChange={(event) => { setNaturalText(event.target.value); setParseError(""); setParseMessage(""); }}
+          />
+          <button
+            type="button"
+            onClick={fillFromDescription}
+            disabled={parsing || naturalText.trim().length < 8}
+            className="mt-3 min-h-11 w-full rounded-xl border border-emerald-900 bg-white px-4 py-2.5 text-sm font-bold text-emerald-950 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          >
+            {parsing ? "Reading your trip…" : "Fill trip details"}
+          </button>
+          <p className="mt-2 text-xs text-emerald-900/80">Your sentence and timezone go to Gemini to fill the form. Review the details and select both places before planning.</p>
+          {parseMessage && <p role="status" className="mt-2 text-sm font-medium text-emerald-900">{parseMessage}</p>}
+          {parseError && <p role="alert" className="mt-2 text-sm font-medium text-red-700">{parseError}</p>}
+        </section>
+
+        <div className="flex items-center gap-3 pt-1" aria-hidden="true">
+          <span className="h-px flex-1 bg-slate-200" />
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Or fill it in</span>
+          <span className="h-px flex-1 bg-slate-200" />
+        </div>
         {recentRoutes.length > 0 && (
           <div>
             <p className="mb-2 text-sm font-semibold">Repeat a recent trip</p>

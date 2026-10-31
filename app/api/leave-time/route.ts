@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { planTrip } from "@/lib/plan-trip";
 import { getLearnedSafetyMargin, validResidualsFromRequest } from "@/lib/calibration";
 import { isTripRequest } from "@/lib/validate-trip";
+import { explainPlanWithGemini } from "@/lib/plan-explanation";
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -22,5 +23,8 @@ export async function POST(request: Request) {
   const requestBody = body as typeof body & { historyResiduals?: unknown };
   const residuals = validResidualsFromRequest(requestBody.historyResiduals);
   const calibration = getLearnedSafetyMargin(residuals, body.importance);
-  return NextResponse.json(await planTrip(body, calibration));
+  const plan = await planTrip(body, calibration);
+  // AI wording is optional; the calculation and fallback explanation are deterministic.
+  plan.explanation = await explainPlanWithGemini(plan);
+  return NextResponse.json(plan);
 }
