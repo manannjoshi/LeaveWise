@@ -46,14 +46,14 @@ function PlaceField({ title, value, selected, onValueChange, onSelect, onSourceC
   }, [value, selected, onSourceChange]);
 
   return (
-    <div className="relative form-row">
+    <div className="relative form-row min-w-0">
       <div className="mb-2 flex items-center justify-between gap-2">
         <label className="block text-sm font-semibold" htmlFor={title}>{title}</label>
         {action}
       </div>
       <input
         id={title}
-        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none"
+        className="w-full min-w-0 rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none"
         value={value}
         onChange={(event) => onValueChange(event.target.value)}
         onFocus={() => { if (places.length) setSheetOpen(true); }}
@@ -367,7 +367,8 @@ export default function TripForm() {
           </div>
         </section>
       )}
-      <form onSubmit={submit} className="mt-6 rounded-2xl bg-white p-4 sm:p-5">
+      <div className="planner-columns">
+      <form onSubmit={submit} className="planner-form mt-6 min-w-0 rounded-2xl bg-white p-4 sm:p-5">
         <fieldset disabled={Boolean(activeTrip)} className="space-y-5 disabled:opacity-70">
         <section className="rounded-2xl bg-emerald-50/70 p-4 sm:p-5" aria-labelledby="quick-trip-title">
           <label id="quick-trip-title" className="block text-base font-bold text-emerald-950" htmlFor="naturalTrip">Describe your trip</label>
@@ -414,10 +415,10 @@ export default function TripForm() {
         {recentRoutes.length > 0 && (
           <div>
             <p className="mb-2 text-sm font-semibold">Repeat a recent trip</p>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="recent-routes flex flex-wrap gap-2 pb-1">
               {recentRoutes.map((route) => (
-                <button key={`${route.id}-repeat`} type="button" onClick={() => repeatRoute(route)} className="min-h-11 max-w-64 shrink-0 truncate rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-950">
-                  {route.origin} → {route.destination}
+                <button key={`${route.id}-repeat`} type="button" onClick={() => repeatRoute(route)} className="recent-route min-h-11 max-w-full rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-950">
+                  <span className="place-name">{route.origin}</span><span aria-hidden="true"> → </span><span className="place-name">{route.destination}</span>
                 </button>
               ))}
             </div>
@@ -500,10 +501,12 @@ export default function TripForm() {
         </details>
 
         {error && <p role="alert" className="text-sm font-medium text-red-700">{error}</p>}
-        <button disabled={loading || Boolean(activeTrip)} className="w-full rounded-xl bg-emerald-900 px-5 py-3 font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60">
-          {loading ? "Planning your trip…" : "When should I leave?"}
-        </button>
         </fieldset>
+        <div className="primary-action-bar">
+          <button disabled={loading || Boolean(activeTrip)} className="primary-action-button w-full rounded-xl bg-emerald-900 px-5 py-3 font-semibold text-white transition disabled:cursor-wait disabled:opacity-60">
+            {loading ? "Planning your trip…" : "When should I leave?"}
+          </button>
+        </div>
       </form>
 
       {plan && (
@@ -548,6 +551,7 @@ export default function TripForm() {
           <InstallAppButton className="mt-3 w-full" />
         </section>
       )}
+      </div>
     </>
   );
 }

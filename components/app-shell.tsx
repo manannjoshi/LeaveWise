@@ -92,6 +92,41 @@ export default function AppShell({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Treat the reduced visual viewport as an open mobile keyboard.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    const updateKeyboardLayout = () => {
+      const focusedField = document.activeElement instanceof HTMLElement &&
+        document.activeElement.matches("input, textarea, select, [contenteditable='true']");
+      const keyboardOpen = focusedField && window.innerHeight - viewport.height > 150;
+      document.documentElement.classList.toggle("keyboard-open", Boolean(keyboardOpen));
+    };
+    const keepFocusedFieldVisible = (event: FocusEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && target.matches("input, textarea, select, [contenteditable='true']")) {
+        window.requestAnimationFrame(() => target.scrollIntoView({ block: "center", behavior: "auto" }));
+      }
+      updateKeyboardLayout();
+    };
+    const clearKeyboardLayout = () => document.documentElement.classList.remove("keyboard-open");
+
+    viewport.addEventListener("resize", updateKeyboardLayout);
+    window.addEventListener("resize", updateKeyboardLayout);
+    document.addEventListener("focusin", keepFocusedFieldVisible);
+    document.addEventListener("focusout", updateKeyboardLayout);
+    window.addEventListener("blur", clearKeyboardLayout);
+    return () => {
+      viewport.removeEventListener("resize", updateKeyboardLayout);
+      window.removeEventListener("resize", updateKeyboardLayout);
+      document.removeEventListener("focusin", keepFocusedFieldVisible);
+      document.removeEventListener("focusout", updateKeyboardLayout);
+      window.removeEventListener("blur", clearKeyboardLayout);
+      clearKeyboardLayout();
+    };
+  }, []);
+
   function rememberDismissal() {
     try {
       localStorage.setItem(installDismissedUntilKey, String(Date.now() + dismissDurationMs));
