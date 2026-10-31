@@ -1,0 +1,452 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
+import type { Importance, LeavePlan, Place, TravelMode, TripRequest } from "@/lib/trip";
+import { arrivalInMinutes, arriveByValidationError, toLocalDateTimeInputValue, tomorrowAtNineLocal } from "@/lib/date-time";
+import { addTripHistoryEntry, clearActiveTrip, getCalibrationResiduals, makeTripHistoryEntry, readActiveTrip, readTripHistory, saveActiveTrip } from "@/lib/trip-history";
+import type { ActiveTrip, TripHistoryEntry } from "@/lib/trip-history";
+import SaveTripButton from "@/components/save-trip-button";
+
+type PlaceFieldProps = {
+  title: string;
+  value: string;
+  selected: Place | null;
+  onValueChange: (value: string) => void;
+  onSelect: (place: Place) => void;
+  onSourceChange: (source: "tomtom" | "mock") => void;
+  action?: ReactNode;
+};
+
+function PlaceField({ title, value, selected, onValueChange, onSelect, onSourceChange, action }: PlaceFieldProps) {
+  const [places, setPlaces] = useState<Place[]>([]);
+
+  useEffect(() => {
+    if (selected || value.trim().length < 2) {
+      setPlaces([]);
+      return;
+    }
+    // Wait until the user pauses typing, then ask our server route for suggestions.
+    const timeout = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/places?q=${encodeURIComponent(value)}`);
+        const data = await response.json();
+        setPlaces(data.places ?? []);
+        onSourceChange(data.source === "tomtom" ? "tomtom" : "mock");
+      } catch {
+        setPlaces([]);
+        onSourceChange("mock");
+      }
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [value, selected, onSourceChange]);
+
+  return (
+    <div className="relative">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <label className="block text-sm font-semibold" htmlFor={title}>{title}</label>
+        {action}
+      </div>
+      <input
+        id={title}
+        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100"
+        value={value}
+        onChange={(event) => onValueChange(event.target.value)}
+        placeholder={`Search ${title.toLowerCase()}`}
+        autoComplete="off"
+        required
+      />
+      {places.length > 0 && (
+        <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg" role="listbox">
+          {places.map((place, index) => (
+            <li key={`${place.label}-${index}`}>
+              <button type="button" className="w-full px-4 py-3 text-left text-sm hover:bg-emerald-50" onClick={() => { onSelect(place); setPlaces([]); }}>
+                {place.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {selected?.label.toLowerCase().endsWith("(sample location)") ? (
+        <p role="status" className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+          Using sample locations: add a TomTom key
+        </p>
+      ) : selected?.label === "My current location" ? (
+        <p className="mt-1 text-xs text-emerald-800">Using this device&apos;s location</p>
+      ) : selected ? (
+        <p className="mt-1 text-xs text-emerald-800">Place selected</p>
+      ) : null}
+    </div>
+  );
+}
+
+function prettyTime(value: string) {
+  return new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+export default function TripForm() {
+  const [originText, setOriginText] = useState("");
+  const [destinationText, setDestinationText] = useState("");
+  const [origin, setOrigin] = useState<Place | null>(null);
+  const [destination, setDestination] = useState<Place | null>(null);
+  const [arriveBy, setArriveBy] = useState(() => tomorrowAtNineLocal());
+  const [arriveByError, setArriveByError] = useState("");
+  const [mode, setMode] = useState<TravelMode>("car");
+  const [importance, setImportance] = useState<Importance>("important");
+  const [buffer, setBuffer] = useState(8);
+  const [plan, setPlan] = useState<LeavePlan | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [geocodingSource, setGeocodingSource] = useState<"tomtom" | "mock" | null>(null);
+  const [arrivalLogMessage, setArrivalLogMessage] = useState("");
+  const [arrivalLogError, setArrivalLogError] = useState("");
+  const [activeTrip, setActiveTrip] = useState<ActiveTrip | null>(null);
+  const [recentRoutes, setRecentRoutes] = useState<TripHistoryEntry[]>([]);
+  const [locationBusy, setLocationBusy] = useState(false);
+  const [locationError, setLocationError] = useState("");
+  const [clock, setClock] = useState(Date.now());
+
+  useEffect(() => {
+    const savedTrip = readActiveTrip();
+    if (savedTrip) {
+      setActiveTrip(savedTrip);
+      setOrigin(savedTrip.trip.origin);
+      setOriginText(savedTrip.trip.origin.label);
+      setDestination(savedTrip.trip.destination);
+      setDestinationText(savedTrip.trip.destination.label);
+      setArriveBy(toLocalDateTimeInputValue(new Date(savedTrip.trip.arriveBy)));
+      setMode(savedTrip.trip.mode);
+      setImportance(savedTrip.trip.importance);
+      setBuffer(savedTrip.trip.fixedBufferMinutes ?? 0);
+      setPlan(savedTrip.plan);
+    }
+
+    const usedRoutes = new Set<string>();
+    const routes = readTripHistory().filter((entry) => entry.routingSource === "tomtom").reverse().filter((entry) => {
+      const key = `${entry.originLat},${entry.originLon}:${entry.destinationLat},${entry.destinationLon}`;
+      if (usedRoutes.has(key)) return false;
+      usedRoutes.add(key);
+      return true;
+    }).slice(0, 4);
+    setRecentRoutes(routes);
+  }, []);
+
+  useEffect(() => {
+    if (!activeTrip) return;
+    const timer = window.setInterval(() => setClock(Date.now()), 15_000);
+    return () => window.clearInterval(timer);
+  }, [activeTrip]);
+
+  function changeMode(nextMode: TravelMode) {
+    setMode(nextMode);
+    setBuffer(nextMode === "car" ? 8 : nextMode === "two-wheeler" ? 5 : 0);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setPlan(null);
+    setArrivalLogMessage("");
+    setArrivalLogError("");
+    const timeError = arriveByValidationError(arriveBy);
+    setArriveByError(timeError);
+    if (timeError) return;
+    if (!origin || !destination) {
+      setError("Choose a suggestion for both places so we know their coordinates.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const body: TripRequest = {
+        origin,
+        destination,
+        arriveBy: new Date(arriveBy).toISOString(),
+        mode,
+        importance,
+        fixedBufferMinutes: buffer,
+      };
+      const historyResiduals = getCalibrationResiduals(readTripHistory());
+      const response = await fetch("/api/leave-time", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, historyResiduals }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Could not plan this trip.");
+      setPlan(data);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not plan this trip.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function recordArrival() {
+    setArrivalLogError("");
+    if (!activeTrip) return;
+    const elapsedMinutes = Math.max(0.1, Math.round((Date.now() - Date.parse(activeTrip.startedAt)) / 6_000) / 10);
+    const saved = addTripHistoryEntry(makeTripHistoryEntry({
+      trip: activeTrip.trip,
+      plan: activeTrip.plan,
+      actualDurationMinutes: elapsedMinutes,
+    }));
+    if (!saved) {
+      setArrivalLogError("Could not save this trip log in this browser.");
+      return;
+    }
+    clearActiveTrip();
+    setActiveTrip(null);
+    setArrivalLogMessage(`Logged ${elapsedMinutes.toFixed(1)} min actual vs ${activeTrip.plan.durationMinutes} min predicted.`);
+    const usedRoutes = new Set<string>();
+    setRecentRoutes(readTripHistory().filter((entry) => entry.routingSource === "tomtom").reverse().filter((entry) => {
+      const key = `${entry.originLat},${entry.originLon}:${entry.destinationLat},${entry.destinationLon}`;
+      if (usedRoutes.has(key)) return false;
+      usedRoutes.add(key);
+      return true;
+    }).slice(0, 4));
+  }
+
+  function startTripTimer() {
+    if (!plan || !origin || !destination) return;
+    setArrivalLogError("");
+    const snapshot: ActiveTrip = {
+      trip: {
+        origin,
+        destination,
+        arriveBy: new Date(arriveBy).toISOString(),
+        mode,
+        importance,
+        fixedBufferMinutes: buffer,
+      },
+      plan,
+      startedAt: new Date().toISOString(),
+    };
+    if (!saveActiveTrip(snapshot)) {
+      setArrivalLogError("Could not start the timer in this browser.");
+      return;
+    }
+    setActiveTrip(snapshot);
+    setClock(Date.now());
+  }
+
+  function useCurrentLocation() {
+    setLocationError("");
+    if (!navigator.geolocation) {
+      setLocationError("Location is not available in this browser.");
+      return;
+    }
+    setLocationBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const place = { label: "My current location", lat: position.coords.latitude, lon: position.coords.longitude };
+        setOrigin(place);
+        setOriginText(place.label);
+        setPlan(null);
+        setGeocodingSource(null);
+        setLocationBusy(false);
+      },
+      (reason) => {
+        setLocationError(reason.code === 1
+          ? "Allow location access, or type your starting place."
+          : "Could not get your location. Try again or type your starting place.");
+        setLocationBusy(false);
+      },
+      { enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 },
+    );
+  }
+
+  function repeatRoute(entry: TripHistoryEntry) {
+    setOrigin({ label: entry.origin, lat: entry.originLat, lon: entry.originLon });
+    setOriginText(entry.origin);
+    setDestination({ label: entry.destination, lat: entry.destinationLat, lon: entry.destinationLon });
+    setDestinationText(entry.destination);
+    setPlan(null);
+  }
+
+  function chooseArrivalTime(value: string) {
+    setArriveBy(value);
+    setArriveByError("");
+    setPlan(null);
+  }
+
+  const inputClass = "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100";
+
+  return (
+    <>
+      {process.env.NODE_ENV === "development" && (
+        <section aria-label="Development service status" className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Development services</p>
+          <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+            <ServiceStatus label="Routing" status={plan ? (plan.source === "tomtom" ? "Live" : "Mocked") : "Not checked"} />
+            <ServiceStatus label="Geocoding" status={geocodingSource ? (geocodingSource === "tomtom" ? "Live" : "Mocked") : "Not checked"} />
+            <ServiceStatus label="Weather" status={plan ? (plan.weatherStatus === "unavailable" ? "Unavailable" : "Live") : "Not checked"} />
+          </div>
+        </section>
+      )}
+      <form onSubmit={submit} className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+        <fieldset disabled={Boolean(activeTrip)} className="space-y-5 disabled:opacity-70">
+        {recentRoutes.length > 0 && (
+          <div>
+            <p className="mb-2 text-sm font-semibold">Repeat a recent trip</p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {recentRoutes.map((route) => (
+                <button key={`${route.id}-repeat`} type="button" onClick={() => repeatRoute(route)} className="min-h-11 max-w-64 shrink-0 truncate rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-950">
+                  {route.origin} → {route.destination}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <PlaceField
+          title="Origin"
+          value={originText}
+          selected={origin}
+          onValueChange={(value) => { setOriginText(value); setOrigin(null); setPlan(null); setGeocodingSource(null); }}
+          onSelect={(place) => { setOrigin(place); setOriginText(place.label); setPlan(null); }}
+          onSourceChange={setGeocodingSource}
+          action={<button type="button" onClick={useCurrentLocation} disabled={locationBusy} className="min-h-11 rounded-full bg-emerald-50 px-3 text-xs font-semibold text-emerald-900 disabled:opacity-60">{locationBusy ? "Finding location…" : "Use my location"}</button>}
+        />
+        {locationError && <p role="alert" className="-mt-3 text-xs text-red-700">{locationError}</p>}
+        <PlaceField title="Destination" value={destinationText} selected={destination} onValueChange={(value) => { setDestinationText(value); setDestination(null); setPlan(null); setGeocodingSource(null); }} onSelect={(place) => { setDestination(place); setDestinationText(place.label); setPlan(null); }} onSourceChange={setGeocodingSource} />
+
+        <div>
+          <label className="mb-2 block text-sm font-semibold" htmlFor="arriveBy">Arrive by</label>
+          <div className="mb-3 flex flex-wrap gap-2" aria-label="Quick arrival times">
+            {[
+              { label: "In 30 min", minutes: 30 },
+              { label: "In 1 hour", minutes: 60 },
+              { label: "In 2 hours", minutes: 120 },
+              { label: "Tomorrow 9 AM", minutes: null },
+            ].map((choice) => (
+              <button
+                key={choice.label}
+                type="button"
+                onClick={() => chooseArrivalTime(choice.minutes === null ? tomorrowAtNineLocal() : arrivalInMinutes(choice.minutes))}
+                className="min-h-11 rounded-full border border-emerald-200 bg-emerald-50 px-4 text-xs font-semibold text-emerald-900 hover:bg-emerald-100"
+              >
+                {choice.label}
+              </button>
+            ))}
+          </div>
+          <input
+            id="arriveBy"
+            className={inputClass}
+            type="datetime-local"
+            value={arriveBy}
+            min={toLocalDateTimeInputValue(new Date())}
+            aria-invalid={Boolean(arriveByError)}
+            aria-describedby={arriveByError ? "arriveByError" : undefined}
+            onChange={(event) => {
+              setArriveBy(event.target.value);
+              setArriveByError(event.target.value ? arriveByValidationError(event.target.value) : "");
+              setPlan(null);
+            }}
+            required
+          />
+          {arriveByError && <p id="arriveByError" role="alert" className="mt-2 text-sm font-medium text-red-700">{arriveByError}</p>}
+        </div>
+
+        <div>
+          <p id="modeLabel" className="mb-2 text-sm font-semibold">Travel mode</p>
+          <div role="group" aria-labelledby="modeLabel" className="grid grid-cols-3 gap-2">
+            <ChoiceButton label="Car" selected={mode === "car"} onClick={() => { changeMode("car"); setPlan(null); }} />
+            <ChoiceButton label="Two-wheeler" selected={mode === "two-wheeler"} onClick={() => { changeMode("two-wheeler"); setPlan(null); }} />
+            <ChoiceButton label="Walk" selected={mode === "walk"} onClick={() => { changeMode("walk"); setPlan(null); }} />
+          </div>
+        </div>
+
+        <div>
+          <p id="importanceLabel" className="mb-2 text-sm font-semibold">How bad is being late?</p>
+          <div role="group" aria-labelledby="importanceLabel" className="grid grid-cols-3 gap-2">
+            <ChoiceButton label="Casual" detail="80%" selected={importance === "casual"} onClick={() => { setImportance("casual"); setPlan(null); }} />
+            <ChoiceButton label="Important" detail="95%" selected={importance === "important"} onClick={() => { setImportance("important"); setPlan(null); }} />
+            <ChoiceButton label="Critical" detail="99%" selected={importance === "critical"} onClick={() => { setImportance("critical"); setPlan(null); }} />
+          </div>
+        </div>
+
+        <details className="rounded-xl border border-slate-200 px-4 py-3">
+          <summary className="cursor-pointer text-sm font-semibold">More options · fixed buffer {buffer} min</summary>
+          <div className="mt-3">
+            <label className="mb-2 block text-sm font-medium" htmlFor="buffer">Fixed buffer (minutes)</label>
+            <input id="buffer" className={inputClass} type="number" min="0" max="180" value={buffer} onChange={(event) => { setBuffer(Number(event.target.value)); setPlan(null); }} required />
+            <p className="mt-1 text-xs text-slate-500">Defaults: car 8, two-wheeler 5, walk 0 minutes.</p>
+          </div>
+        </details>
+
+        {error && <p role="alert" className="text-sm font-medium text-red-700">{error}</p>}
+        <button disabled={loading || Boolean(activeTrip)} className="w-full rounded-xl bg-emerald-900 px-5 py-3 font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60">
+          {loading ? "Planning your trip…" : "When should I leave?"}
+        </button>
+        </fieldset>
+      </form>
+
+      {plan && (
+        <section aria-live="polite" className="mt-6 rounded-2xl bg-emerald-950 p-6 text-white shadow-lg sm:p-8">
+          <p className="text-sm font-medium uppercase tracking-widest text-emerald-200">Recommended leave time</p>
+          <p className="mt-2 text-5xl font-bold tracking-tight">{prettyTime(plan.leaveAt)}</p>
+          <p className="mt-2 text-emerald-100">Arrive by {prettyTime(plan.arriveBy)} · {plan.durationMinutes} min expected travel</p>
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat label={plan.safetyMarginMethod === "learned" ? `Safety margin · learned (${plan.safetyMarginSampleCount})` : "Safety margin"} value={`${plan.safetyMarginMinutes} min`} />
+            <Stat label="Fixed buffer" value={`${plan.fixedBufferMinutes} min`} />
+            <Stat label="On-time target" value={`${plan.confidence}%`} />
+            <Stat
+              label="Rain adjustment"
+              value={mode === "car" ? "Not applied (car)" : plan.weatherPenaltyMinutes > 0 ? `+${plan.weatherPenaltyMinutes} min` : plan.weatherStatus === "unavailable" ? "Unknown" : "None"}
+            />
+          </div>
+          <p className="mt-5 text-sm text-emerald-100">{plan.explanation}</p>
+          {plan.source === "mock" && <p className="mt-3 rounded-lg bg-white/10 px-3 py-2 text-xs text-emerald-100">Sample estimate: add a TomTom key for live traffic-aware routing.</p>}
+          <section className="mt-5 rounded-xl bg-white/10 p-4">
+            <h2 className="text-sm font-semibold">After your trip</h2>
+            <p className="mt-1 text-xs text-emerald-100">Predicted {plan.durationMinutes} min. Start the timer when you leave, then tap once when you arrive.</p>
+            {activeTrip ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-emerald-100">Timer running · {Math.max(0, Math.floor((clock - Date.parse(activeTrip.startedAt)) / 60_000))} min elapsed</p>
+                <button type="button" onClick={recordArrival} className="rounded-lg bg-white px-5 py-3 text-sm font-bold text-emerald-950">I arrived</button>
+              </div>
+            ) : arrivalLogMessage ? (
+              <p role="status" className="mt-2 text-sm text-emerald-100">{arrivalLogMessage}</p>
+            ) : (
+              <button type="button" onClick={startTripTimer} className="mt-3 w-full rounded-lg bg-white px-4 py-3 text-sm font-bold text-emerald-950">I left · start timer</button>
+            )}
+            {arrivalLogError && <p role="alert" className="mt-2 text-sm text-rose-200">{arrivalLogError}</p>}
+          </section>
+          {!activeTrip && <SaveTripButton historyResiduals={getCalibrationResiduals(readTripHistory())} trip={{
+            origin: origin!,
+            destination: destination!,
+            arriveBy: new Date(arriveBy).toISOString(),
+            mode,
+            importance,
+            fixedBufferMinutes: buffer,
+          }} />}
+        </section>
+      )}
+    </>
+  );
+}
+
+function ServiceStatus({ label, status }: { label: string; status: string }) {
+  return (
+    <p className="rounded-md bg-white px-2 py-1.5 text-slate-700">
+      <span className="font-semibold">{label}:</span> {status}
+    </p>
+  );
+}
+
+function ChoiceButton({ label, detail, selected, onClick }: { label: string; detail?: string; selected: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onClick}
+      className={`min-h-14 rounded-xl border px-2 py-2 text-sm font-semibold transition ${selected ? "border-emerald-900 bg-emerald-900 text-white" : "border-slate-300 bg-white text-slate-800 hover:border-emerald-700"}`}
+    >
+      <span className="block">{label}</span>
+      {detail && <span className={`mt-0.5 block text-xs ${selected ? "text-emerald-100" : "text-slate-500"}`}>{detail} target</span>}
+    </button>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-xl bg-white/10 p-3"><p className="text-xs text-emerald-200">{label}</p><p className="mt-1 text-lg font-semibold">{value}</p></div>;
+}

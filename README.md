@@ -60,7 +60,7 @@ If PowerShell says it cannot find `npm-cli.js`, repair/reinstall Node.js LTS and
 
 The route handler queries departure-time traffic three times because travel duration changes with departure time. Before five completed live-routing trips, the formula adds a 5% / 15% / 30% safety margin, with a 3-minute minimum for important and critical trips. After five, the selected confidence (80% / 95% / 99%) uses that percentile of the browser's logged `actual duration - predicted duration` values instead. Sample-route logs do not calibrate live routing. This student project does not have enough data to guarantee the selected on-time probability.
 
-The arrive-by field keeps the browser-native date/time picker and adds one-tap relative-time shortcuts. After traveling, enter the actual minutes and press **I arrived**. Logs stay in that browser's local storage; no account or server sync is used. The `/evaluation` page compares arrival error if each strategy starts at its recommended time: the app's allowance versus raw ETA + 10 minutes. It calculates metrics from completed live-route logs and includes every log in the CSV export.
+The arrive-by field keeps the browser-native date/time picker and adds one-tap relative-time shortcuts. On mobile, use device location for the origin or repeat a recent trip; tap **I left · start timer** and then **I arrived** to record actual duration without typing. Completed logs stay in that browser's local storage; no account or server sync is used. The `/evaluation` page compares arrival error if each strategy starts at its recommended time: the app's allowance versus raw ETA + 10 minutes. It calculates metrics from completed live-route logs and includes every log in the CSV export.
 
 For selected real places, the server also requests hourly rain and showers from Open-Meteo at the origin around the planned leave time. Rain adds six minutes for walking and two-wheeler trips; car trips receive no extra rain penalty. A missing forecast adds no penalty. Open-Meteo's free API permits educational non-commercial use, is rate limited, and requires CC BY 4.0 attribution; the app credits it in the page footer.
 
@@ -94,6 +94,8 @@ Create or sign into a TomTom account, open **API & SDK Keys**, and copy the key 
 - Try casual, important, and critical; check the target labels of 80%, 95%, and 99%, and confirm safety minutes increase.
 - Confirm the arrive-by field starts at tomorrow at 9:00 AM and rejects a past time with an inline message.
 - Try the one-tap arrival presets and confirm each updates the date/time picker.
+- Use the current-location shortcut, then start and stop the trip timer; actual duration should save without typing.
+- Complete one live trip, then repeat it from the recent-trip shortcut.
 - Complete five live-route logs, then plan another trip and confirm the safety margin is labeled learned; sample-route logs should not count toward the five.
 - Open `/evaluation`, compare app and baseline metrics, and export the CSV. Mock-route logs should appear in the CSV but be excluded from live-route metrics.
 - Search for locations with a TomTom key, select suggestions, and verify the route uses the selected places.

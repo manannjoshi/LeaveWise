@@ -1,0 +1,26 @@
+import { NextResponse } from "next/server";
+import { planTrip } from "@/lib/plan-trip";
+import { getLearnedSafetyMargin, validResidualsFromRequest } from "@/lib/calibration";
+import { isTripRequest } from "@/lib/validate-trip";
+
+export async function POST(request: Request) {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Please send valid trip details." }, { status: 400 });
+  }
+
+  if (!isTripRequest(body)) {
+    return NextResponse.json({ error: "Please complete each trip field." }, { status: 400 });
+  }
+
+  if (Date.parse(body.arriveBy) <= Date.now()) {
+    return NextResponse.json({ error: "Arrive-by time must be in the future." }, { status: 400 });
+  }
+
+  const requestBody = body as typeof body & { historyResiduals?: unknown };
+  const residuals = validResidualsFromRequest(requestBody.historyResiduals);
+  const calibration = getLearnedSafetyMargin(residuals, body.importance);
+  return NextResponse.json(await planTrip(body, calibration));
+}
