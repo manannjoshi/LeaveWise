@@ -92,8 +92,9 @@ export async function POST(request: Request) {
   } catch (error) {
     const code = error instanceof GroqError ? error.code : "unexpected";
     const status = error instanceof GroqError ? error.status : undefined;
+    const providerDetails = error instanceof GroqError ? error.providerDetails : undefined;
     // Keep diagnostics useful without logging the API key or the user's location text.
-    console.error("Groq trip parsing failed", { code, status });
+    console.error("Groq trip parsing failed", { code, status, ...providerDetails });
 
     let message = "Groq couldn't read that trip right now. Your normal trip form is ready below.";
     if (status === 401 || status === 403) message = "Groq rejected the API key or its access. Check GROQ_API_KEY in Vercel.";

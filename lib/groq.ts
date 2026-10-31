@@ -7,7 +7,11 @@ export type GroqFailureCode = "missing_key" | "network" | "timeout" | "provider_
 
 // Safe diagnostic details only; never include the API key or user prompt.
 export class GroqError extends Error {
-  constructor(readonly code: GroqFailureCode, readonly status?: number) {
+  constructor(
+    readonly code: GroqFailureCode,
+    readonly status?: number,
+    readonly providerDetails?: { type?: string; code?: string; param?: string },
+  ) {
     super(code);
     this.name = "GroqError";
   }
@@ -55,7 +59,26 @@ export async function generateGroqJson<T>(
     throw new GroqError(code);
   }
 
-  if (!response.ok) throw new GroqError("provider_http", response.status);
+  if (!response.ok) {
+    // Log only short provider metadata, never the response message or submitted trip text.
+    let providerDetails: { type?: string; code?: string; param?: string } | undefined;
+    try {
+      const body = await response.json();
+      const details = body?.error;
+      if (details && typeof details === "object") {
+        const safeValue = (value: unknown) =>
+          typeof value === "string" && /^[a-zA-Z0-9_.-]{1,80}$/.test(value) ? value : undefined;
+        providerDetails = {
+          type: safeValue(details.type),
+          code: safeValue(details.code),
+          param: safeValue(details.param),
+        };
+      }
+    } catch {
+      // A missing or non-JSON error body still reports the HTTP status below.
+    }
+    throw new GroqError("provider_http", response.status, providerDetails);
+  }
   let data: { choices?: Array<{ message?: { content?: string | null } }> };
   try {
     data = await response.json();
