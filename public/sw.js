@@ -1,4 +1,4 @@
-const CACHE_NAME = "leave-on-time-v1";
+const CACHE_NAME = "leave-wise-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.add("/")));
@@ -31,7 +31,7 @@ self.addEventListener("push", (event) => {
   }
 
   // iOS expects a visible notification for every delivered push event.
-  event.waitUntil(self.registration.showNotification(payload.title || "Leave On Time", {
+  event.waitUntil(self.registration.showNotification(payload.title || "LeaveWise", {
     body: payload.body || "Your trip plan has been updated.",
     icon: "/icon-192.png",
     badge: "/icon-192.png",

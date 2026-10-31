@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { TripRequest } from "@/lib/trip";
+import { useInstallFlow } from "@/components/app-shell";
 
 function decodeVapidKey(value: string) {
   const padding = "=".repeat((4 - value.length % 4) % 4);
@@ -11,6 +12,7 @@ function decodeVapidKey(value: string) {
 }
 
 export default function SaveTripButton({ trip, historyResiduals }: { trip: TripRequest; historyResiduals: number[] }) {
+  const { isIosSafariNotInstalled, showIosReminderHelp } = useInstallFlow();
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -27,6 +29,13 @@ export default function SaveTripButton({ trip, historyResiduals }: { trip: TripR
   async function saveTrip() {
     setMessage("");
     setIsError(false);
+
+    if (isIosSafariNotInstalled) {
+      if (!showIosReminderHelp()) {
+        setMessage("To enable iPhone reminders, add LeaveWise to your Home Screen from Safari.");
+      }
+      return;
+    }
 
     if (!publicKey) {
       setIsError(true);
@@ -84,7 +93,7 @@ export default function SaveTripButton({ trip, historyResiduals }: { trip: TripR
         disabled={busy || saved}
         className="w-full rounded-xl border border-emerald-200 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/15 disabled:opacity-60"
       >
-        {busy ? "Saving trip and setting reminders…" : saved ? "Trip saved" : "Save trip & enable reminders"}
+        {busy ? "Saving trip and setting reminders…" : saved ? "Reminders enabled" : "Remind me"}
       </button>
       {message && <p className={`mt-3 text-sm ${isError ? "text-rose-200" : "text-emerald-100"}`} role={isError ? "alert" : "status"}>{message}</p>}
     </div>

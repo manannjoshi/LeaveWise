@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import AppShell from "@/components/app-shell";
 import ServiceWorkerRegistration from "@/components/service-worker-registration";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Leave On Time",
+  title: "LeaveWise",
   description: "Know when to leave to arrive on time.",
   manifest: "/manifest.json",
   icons: {
@@ -13,18 +14,23 @@ export const metadata: Metadata = {
     ],
     apple: "/apple-touch-icon.png",
   },
-  appleWebApp: { capable: true, title: "Leave On Time", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "LeaveWise", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#142b24",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#000000",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
-      <ServiceWorkerRegistration />
+      <body>
+        <AppShell>{children}</AppShell>
+        <ServiceWorkerRegistration />
+      </body>
     </html>
   );
 }

@@ -7,6 +7,7 @@ import { arrivalInMinutes, arriveByValidationError, toLocalDateTimeInputValue, t
 import { addTripHistoryEntry, clearActiveTrip, getCalibrationResiduals, makeTripHistoryEntry, readActiveTrip, readTripHistory, saveActiveTrip } from "@/lib/trip-history";
 import type { ActiveTrip, TripHistoryEntry } from "@/lib/trip-history";
 import SaveTripButton from "@/components/save-trip-button";
+import InstallAppButton from "@/components/install-app-button";
 
 type PlaceFieldProps = {
   title: string;
@@ -20,6 +21,7 @@ type PlaceFieldProps = {
 
 function PlaceField({ title, value, selected, onValueChange, onSelect, onSourceChange, action }: PlaceFieldProps) {
   const [places, setPlaces] = useState<Place[]>([]);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
     if (selected || value.trim().length < 2) {
@@ -32,9 +34,11 @@ function PlaceField({ title, value, selected, onValueChange, onSelect, onSourceC
         const response = await fetch(`/api/places?q=${encodeURIComponent(value)}`);
         const data = await response.json();
         setPlaces(data.places ?? []);
+        setSheetOpen(Boolean(data.places?.length));
         onSourceChange(data.source === "tomtom" ? "tomtom" : "mock");
       } catch {
         setPlaces([]);
+        setSheetOpen(false);
         onSourceChange("mock");
       }
     }, 300);
@@ -42,30 +46,40 @@ function PlaceField({ title, value, selected, onValueChange, onSelect, onSourceC
   }, [value, selected, onSourceChange]);
 
   return (
-    <div className="relative">
+    <div className="relative form-row">
       <div className="mb-2 flex items-center justify-between gap-2">
         <label className="block text-sm font-semibold" htmlFor={title}>{title}</label>
         {action}
       </div>
       <input
         id={title}
-        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100"
+        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none"
         value={value}
         onChange={(event) => onValueChange(event.target.value)}
+        onFocus={() => { if (places.length) setSheetOpen(true); }}
         placeholder={`Search ${title.toLowerCase()}`}
         autoComplete="off"
         required
       />
-      {places.length > 0 && (
-        <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg" role="listbox">
-          {places.map((place, index) => (
-            <li key={`${place.label}-${index}`}>
-              <button type="button" className="w-full px-4 py-3 text-left text-sm hover:bg-emerald-50" onClick={() => { onSelect(place); setPlaces([]); }}>
-                {place.label}
-              </button>
-            </li>
-          ))}
-        </ul>
+      {places.length > 0 && sheetOpen && (
+        <div className="place-sheet-backdrop" onClick={() => setSheetOpen(false)}>
+          <section className="place-sheet" role="dialog" aria-modal="true" aria-label={`Choose ${title.toLowerCase()}`} onClick={(event) => event.stopPropagation()}>
+            <div className="place-sheet-handle" />
+            <div className="mb-3 flex min-h-11 items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">Choose {title.toLowerCase()}</h2>
+              <button type="button" onClick={() => setSheetOpen(false)} className="min-h-11 rounded-full px-3 text-accent">Close</button>
+            </div>
+            <ul role="listbox">
+              {places.map((place, index) => (
+                <li className="place-sheet-row" key={`${place.label}-${index}`}>
+                  <button type="button" role="option" aria-selected="false" onClick={() => { onSelect(place); setPlaces([]); setSheetOpen(false); }}>
+                    {place.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
       )}
       {selected?.label.toLowerCase().endsWith("(sample location)") ? (
         <p role="status" className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
@@ -339,13 +353,13 @@ export default function TripForm() {
     setPlan(null);
   }
 
-  const inputClass = "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100";
+  const inputClass = "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none";
 
   return (
     <>
       {process.env.NODE_ENV === "development" && (
-        <section aria-label="Development service status" className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Development services</p>
+        <section aria-label="Development service status" className="mt-6 rounded-xl bg-slate-50 p-4">
+          <p className="text-sm font-semibold text-slate-600">Service status</p>
           <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
             <ServiceStatus label="Routing" status={plan ? (plan.source === "tomtom" ? "Live" : "Mocked") : "Not checked"} />
             <ServiceStatus label="Geocoding" status={geocodingSource ? (geocodingSource === "tomtom" ? "Live" : "Mocked") : "Not checked"} />
@@ -353,9 +367,9 @@ export default function TripForm() {
           </div>
         </section>
       )}
-      <form onSubmit={submit} className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+      <form onSubmit={submit} className="mt-6 rounded-2xl bg-white p-4 sm:p-5">
         <fieldset disabled={Boolean(activeTrip)} className="space-y-5 disabled:opacity-70">
-        <section className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 sm:p-5" aria-labelledby="quick-trip-title">
+        <section className="rounded-2xl bg-emerald-50/70 p-4 sm:p-5" aria-labelledby="quick-trip-title">
           <label id="quick-trip-title" className="block text-base font-bold text-emerald-950" htmlFor="naturalTrip">Describe your trip</label>
           <p className="mt-1 text-sm text-emerald-900">For example: “Be at the airport by 6am Friday from my hostel.”</p>
           <textarea
@@ -374,11 +388,11 @@ export default function TripForm() {
           >
             {parsing ? "Reading your trip…" : "Fill trip details"}
           </button>
-          <p className="mt-2 text-xs text-emerald-900/80">Your sentence and timezone go to Groq to fill the form. Review the details and select both places before planning.</p>
+          <p className="mt-2 text-sm text-emerald-900/80">Your sentence and timezone go to Groq to fill the form. Review the trip before planning.</p>
           {parseMessage && <p role="status" className="mt-2 text-sm font-medium text-emerald-900">{parseMessage}</p>}
           {parseError && <p role="alert" className="mt-2 text-sm font-medium text-red-700">{parseError}</p>}
           {needsOriginConfirmation && (
-            <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3" role="status">
+            <div className="mt-3 rounded-xl bg-amber-50 p-3" role="status">
               <p className="text-sm font-semibold text-amber-950">I couldn&apos;t find a starting point. Would you like to use your current location?</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button type="button" onClick={useCurrentLocation} disabled={locationBusy} className="min-h-11 rounded-lg bg-emerald-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
@@ -394,7 +408,7 @@ export default function TripForm() {
 
         <div className="flex items-center gap-3 pt-1" aria-hidden="true">
           <span className="h-px flex-1 bg-slate-200" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Or fill it in</span>
+          <span className="text-sm font-semibold text-slate-500">Or fill it in</span>
           <span className="h-px flex-1 bg-slate-200" />
         </div>
         {recentRoutes.length > 0 && (
@@ -402,7 +416,7 @@ export default function TripForm() {
             <p className="mb-2 text-sm font-semibold">Repeat a recent trip</p>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {recentRoutes.map((route) => (
-                <button key={`${route.id}-repeat`} type="button" onClick={() => repeatRoute(route)} className="min-h-11 max-w-64 shrink-0 truncate rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-950">
+                <button key={`${route.id}-repeat`} type="button" onClick={() => repeatRoute(route)} className="min-h-11 max-w-64 shrink-0 truncate rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-950">
                   {route.origin} → {route.destination}
                 </button>
               ))}
@@ -416,12 +430,12 @@ export default function TripForm() {
           onValueChange={(value) => { setOriginText(value); setOrigin(null); setPlan(null); setGeocodingSource(null); }}
           onSelect={(place) => { setOrigin(place); setOriginText(place.label); setPlan(null); }}
           onSourceChange={setGeocodingSource}
-          action={<button type="button" onClick={useCurrentLocation} disabled={locationBusy} className="min-h-11 rounded-full bg-emerald-50 px-3 text-xs font-semibold text-emerald-900 disabled:opacity-60">{locationBusy ? "Finding location…" : "Use my location"}</button>}
+          action={<button type="button" onClick={useCurrentLocation} disabled={locationBusy} className="min-h-11 rounded-full bg-emerald-50 px-3 text-sm font-semibold text-emerald-900 disabled:opacity-60">{locationBusy ? "Finding location…" : "Use my location"}</button>}
         />
         {locationError && <p role="alert" className="-mt-3 text-xs text-red-700">{locationError}</p>}
         <PlaceField title="Destination" value={destinationText} selected={destination} onValueChange={(value) => { setDestinationText(value); setDestination(null); setPlan(null); setGeocodingSource(null); }} onSelect={(place) => { setDestination(place); setDestinationText(place.label); setPlan(null); }} onSourceChange={setGeocodingSource} />
 
-        <div>
+        <div className="form-row">
           <label className="mb-2 block text-sm font-semibold" htmlFor="arriveBy">Arrive by</label>
           <div className="mb-3 flex flex-wrap gap-2" aria-label="Quick arrival times">
             {[
@@ -434,7 +448,7 @@ export default function TripForm() {
                 key={choice.label}
                 type="button"
                 onClick={() => chooseArrivalTime(choice.minutes === null ? tomorrowAtNineLocal() : arrivalInMinutes(choice.minutes))}
-                className="min-h-11 rounded-full border border-emerald-200 bg-emerald-50 px-4 text-xs font-semibold text-emerald-900 hover:bg-emerald-100"
+                className="min-h-11 rounded-full border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
               >
                 {choice.label}
               </button>
@@ -458,7 +472,7 @@ export default function TripForm() {
           {arriveByError && <p id="arriveByError" role="alert" className="mt-2 text-sm font-medium text-red-700">{arriveByError}</p>}
         </div>
 
-        <div>
+        <div className="form-row">
           <p id="modeLabel" className="mb-2 text-sm font-semibold">Travel mode</p>
           <div role="group" aria-labelledby="modeLabel" className="grid grid-cols-3 gap-2">
             <ChoiceButton label="Car" selected={mode === "car"} onClick={() => { changeMode("car"); setPlan(null); }} />
@@ -467,7 +481,7 @@ export default function TripForm() {
           </div>
         </div>
 
-        <div>
+        <div className="form-row">
           <p id="importanceLabel" className="mb-2 text-sm font-semibold">How bad is being late?</p>
           <div role="group" aria-labelledby="importanceLabel" className="grid grid-cols-3 gap-2">
             <ChoiceButton label="Casual" detail="80%" selected={importance === "casual"} onClick={() => { setImportance("casual"); setPlan(null); }} />
@@ -476,8 +490,8 @@ export default function TripForm() {
           </div>
         </div>
 
-        <details className="rounded-xl border border-slate-200 px-4 py-3">
-          <summary className="cursor-pointer text-sm font-semibold">More options · fixed buffer {buffer} min</summary>
+        <details className="rounded-xl bg-slate-50 px-4 py-3">
+          <summary className="cursor-pointer text-sm font-semibold">More options, fixed buffer {buffer} min</summary>
           <div className="mt-3">
             <label className="mb-2 block text-sm font-medium" htmlFor="buffer">Fixed buffer (minutes)</label>
             <input id="buffer" className={inputClass} type="number" min="0" max="180" value={buffer} onChange={(event) => { setBuffer(Number(event.target.value)); setPlan(null); }} required />
@@ -493,14 +507,14 @@ export default function TripForm() {
       </form>
 
       {plan && (
-        <section aria-live="polite" className="mt-6 rounded-2xl bg-emerald-950 p-6 text-white shadow-lg sm:p-8">
-          <p className="text-sm font-medium uppercase tracking-widest text-emerald-200">Recommended leave time</p>
-          <p className="mt-2 text-5xl font-bold tracking-tight">{prettyTime(plan.leaveAt)}</p>
-          <p className="mt-2 text-emerald-100">Arrive by {prettyTime(plan.arriveBy)} · {plan.durationMinutes} min expected travel</p>
+        <section aria-live="polite" className="trip-result mt-5 rounded-2xl bg-emerald-950 p-5 text-white sm:p-6">
+          <p className="text-sm font-medium text-emerald-200">Recommended leave time</p>
+          <p className="leave-time-value">{prettyTime(plan.leaveAt)}</p>
+          <p className="mt-3 text-emerald-100">Arrive by {prettyTime(plan.arriveBy)} | {plan.durationMinutes} min expected travel</p>
           <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Stat label={plan.safetyMarginMethod === "learned" ? `Safety margin · learned (${plan.safetyMarginSampleCount})` : "Safety margin"} value={`${plan.safetyMarginMinutes} min`} />
+            <Stat label={plan.safetyMarginMethod === "learned" ? `Safety margin, learned (${plan.safetyMarginSampleCount})` : "Safety margin"} value={`${plan.safetyMarginMinutes} min`} />
             <Stat label="Fixed buffer" value={`${plan.fixedBufferMinutes} min`} />
-            <Stat label="On-time target" value={`${plan.confidence}%`} />
+            <Stat label="On-time confidence" value={`${plan.confidence}%`} status={plan.confidence >= 99 ? "good" : plan.confidence >= 95 ? "tight" : "risky"} />
             <Stat
               label="Rain adjustment"
               value={mode === "car" ? "Not applied (car)" : plan.weatherPenaltyMinutes > 0 ? `+${plan.weatherPenaltyMinutes} min` : plan.weatherStatus === "unavailable" ? "Unknown" : "None"}
@@ -510,16 +524,16 @@ export default function TripForm() {
           {plan.source === "mock" && <p className="mt-3 rounded-lg bg-white/10 px-3 py-2 text-xs text-emerald-100">Sample estimate: add a TomTom key for live traffic-aware routing.</p>}
           <section className="mt-5 rounded-xl bg-white/10 p-4">
             <h2 className="text-sm font-semibold">After your trip</h2>
-            <p className="mt-1 text-xs text-emerald-100">Predicted {plan.durationMinutes} min. Start the timer when you leave, then tap once when you arrive.</p>
+            <p className="mt-1 text-sm text-emerald-100">Predicted {plan.durationMinutes} min. Start the timer when you leave, then tap once when you arrive.</p>
             {activeTrip ? (
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-emerald-100">Timer running · {Math.max(0, Math.floor((clock - Date.parse(activeTrip.startedAt)) / 60_000))} min elapsed</p>
+                <p className="text-sm text-emerald-100">Timer running | {Math.max(0, Math.floor((clock - Date.parse(activeTrip.startedAt)) / 60_000))} min elapsed</p>
                 <button type="button" onClick={recordArrival} className="rounded-lg bg-white px-5 py-3 text-sm font-bold text-emerald-950">I arrived</button>
               </div>
             ) : arrivalLogMessage ? (
               <p role="status" className="mt-2 text-sm text-emerald-100">{arrivalLogMessage}</p>
             ) : (
-              <button type="button" onClick={startTripTimer} className="mt-3 w-full rounded-lg bg-white px-4 py-3 text-sm font-bold text-emerald-950">I left · start timer</button>
+              <button type="button" onClick={startTripTimer} className="mt-3 w-full rounded-lg bg-white px-4 py-3 text-sm font-bold text-emerald-950">I left, start timer</button>
             )}
             {arrivalLogError && <p role="alert" className="mt-2 text-sm text-rose-200">{arrivalLogError}</p>}
           </section>
@@ -531,6 +545,7 @@ export default function TripForm() {
             importance,
             fixedBufferMinutes: buffer,
           }} />}
+          <InstallAppButton className="mt-3 w-full" />
         </section>
       )}
     </>
@@ -559,6 +574,6 @@ function ChoiceButton({ label, detail, selected, onClick }: { label: string; det
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-xl bg-white/10 p-3"><p className="text-xs text-emerald-200">{label}</p><p className="mt-1 text-lg font-semibold">{value}</p></div>;
+function Stat({ label, value, status }: { label: string; value: string; status?: "good" | "tight" | "risky" }) {
+  return <div className="rounded-xl bg-white/10 p-3"><p className="text-sm text-emerald-200">{label}</p><p className="mt-1 text-lg font-semibold">{status && <span className={`confidence-dot ${status}`} aria-hidden="true" />}{value}</p></div>;
 }
