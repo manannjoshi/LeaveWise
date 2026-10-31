@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { generateGeminiJson } from "@/lib/gemini";
+import { generateGeminiJson, GeminiError } from "@/lib/gemini";
 import type { Importance, TravelMode } from "@/lib/trip";
 
 const schema = {
@@ -85,7 +85,18 @@ export async function POST(request: Request) {
     return NextResponse.json({
       trip: { ...trip, origin: trip.origin.trim(), destination: trip.destination.trim() },
     });
-  } catch {
-    return NextResponse.json({ error: "I couldn't parse that right now. Your normal trip form is ready below." }, { status: 502 });
+  } catch (error) {
+    const code = error instanceof GeminiError ? error.code : "unexpected";
+    const status = error instanceof GeminiError ? error.status : undefined;
+    // Keep diagnostics useful without logging the API key or the user's location text.
+    console.error("Gemini trip parsing failed", { code, status });
+
+    let message = "Gemini couldn't read that trip right now. Your normal trip form is ready below.";
+    if (status === 401 || status === 403) message = "Gemini rejected the API key or its access. Check the Vercel key and Google AI Studio access.";
+    else if (status === 429) message = "Gemini's request limit was reached. Try again later or check the key's quota.";
+    else if (status === 400 || status === 404) message = "Gemini rejected the request setup. Check the latest Vercel runtime log for the status.";
+    else if (code === "timeout" || code === "network") message = "Gemini did not respond in time. Check the connection and try again.";
+
+    return NextResponse.json({ error: `${message} You can still use the trip form below.` }, { status: 502 });
   }
 }
