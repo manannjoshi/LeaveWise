@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { calculateEvaluation } from "@/lib/evaluation";
 import { readPlannedTrips, readTripHistory } from "@/lib/trip-history";
 import type { PlannedTripEntry, TripHistoryEntry } from "@/lib/trip-history";
@@ -44,10 +44,7 @@ export default function EvaluationDashboard() {
           </div>
         </div>
 
-        <section className="mt-6 overflow-hidden rounded-2xl bg-white" aria-label="Planned trips">
-          <div className="border-b border-slate-200 px-4 py-4 sm:px-6">
-            <h2 className="font-semibold">Planned trips ({plannedTrips.length})</h2>
-          </div>
+        <DisclosureSection title={`Planned trips (${plannedTrips.length})`} ariaLabel="Planned trips">
           {plannedTrips.length === 0 ? (
             <p className="px-4 py-8 text-sm text-slate-600 sm:px-6">Trips you calculate will appear here.</p>
           ) : (
@@ -62,7 +59,8 @@ export default function EvaluationDashboard() {
               ))}
             </ul>
           )}
-        </section>
+        </DisclosureSection>
+
         <section aria-label="Evaluation metrics" className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Metric label="App on-time rate" value={formatRate(metrics.appOnTimeRate)} />
           <Metric label="Baseline on-time rate" value={formatRate(metrics.baselineOnTimeRate)} />
@@ -77,10 +75,7 @@ export default function EvaluationDashboard() {
         </p>
         <p className="mt-2 text-sm text-slate-500">Planned trips and completed logs are stored on this device.</p>
 
-        <section className="mt-6 overflow-hidden rounded-2xl bg-white">
-          <div className="border-b border-slate-200 px-4 py-4 sm:px-6">
-            <h2 className="font-semibold">Completed trip logs ({entries.length})</h2>
-          </div>
+        <DisclosureSection title={`Completed trip logs (${entries.length})`} ariaLabel="Completed trip logs" className="mt-6">
           {entries.length === 0 ? (
             <p className="px-4 py-8 text-sm text-slate-600 sm:px-6">No trips logged yet. Plan a trip, enter its actual duration after arriving, and press “I arrived.”</p>
           ) : (
@@ -98,9 +93,46 @@ export default function EvaluationDashboard() {
               ))}
             </ul>
           )}
-        </section>
+        </DisclosureSection>
       </div>
     </main>
+  );
+}
+
+function DisclosureSection({
+  title,
+  ariaLabel,
+  className = "",
+  children,
+}: {
+  title: string;
+  ariaLabel: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <section aria-label={ariaLabel} className={`overflow-hidden rounded-2xl bg-white ${className}`}>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="flex w-full cursor-pointer items-center justify-between gap-3 px-4 py-4 text-left font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-600 sm:px-6"
+      >
+        <h2>{title}</h2>
+        <svg className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-300 ease-in-out motion-reduce:transition-none ${open ? "rotate-180" : "rotate-0"}`} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      <div
+        aria-hidden={!open}
+        inert={!open}
+        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out motion-reduce:transition-none ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
+      >
+        <div className="min-h-0 overflow-hidden border-t border-slate-200">{children}</div>
+      </div>
+    </section>
   );
 }
 
