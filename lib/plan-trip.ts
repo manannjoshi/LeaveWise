@@ -4,6 +4,13 @@ import { rainAtDeparture, rainPenaltyMinutes, weatherAroundDeparture } from "@/l
 import type { HourlyRainForecast } from "@/lib/weather";
 import type { Importance, LeavePlan, Place, TravelMode, TripRequest, WeatherStatus } from "@/lib/trip";
 
+// Contains only a safe status code; never include the key or route coordinates in logs.
+class TomTomRoutingError extends Error {
+  constructor(readonly status?: number, readonly reason?: string) {
+    super("TomTom routing request failed");
+  }
+}
+
 function mockDurationMinutes(origin: Place, destination: Place, mode: TravelMode) {
   const radians = (degrees: number) => (degrees * Math.PI) / 180;
   const lat1 = radians(origin.lat);
@@ -23,8 +30,16 @@ async function getTomTomDuration(input: TripRequest, departAt: string, key: stri
   url.searchParams.set("departAt", departAt);
   url.searchParams.set("traffic", "true");
   url.searchParams.set("travelMode", toTomTomTravelMode(input.mode));
-  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(8_000) });
-  if (!response.ok) throw new Error("TomTom Routing request failed");
+  let response: Response;
+  try {
+    response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(8_000) });
+  } catch (error) {
+    const reason = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
+      ? "timeout"
+      : "network";
+    throw new TomTomRoutingError(undefined, reason);
+  }
+  if (!response.ok) throw new TomTomRoutingError(response.status);
   const data = await response.json();
   const seconds = data.routes?.[0]?.summary?.travelTimeInSeconds;
   if (!Number.isFinite(seconds)) throw new Error("TomTom returned no route duration");
@@ -92,7 +107,15 @@ export async function planTrip(trip: TripRequest, learnedSafetyMargin?: LearnedS
       const estimate = calculateLeaveTime({ ...trip, durationMinutes, fixedBufferMinutes: buffer, learnedSafetyMargin: learnedSafetyMargin ?? undefined });
       guess = new Date(estimate.leaveAt);
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof TomTomRoutingError) {
+      console.error("TomTom routing failed; using sample estimate", {
+        status: error.status,
+        reason: error.reason ?? (error.status ? "provider_http" : "invalid_response"),
+      });
+    } else {
+      console.error("TomTom routing failed; using sample estimate", { reason: "invalid_response" });
+    }
     source = "mock";
     durationMinutes = mockDurationMinutes(trip.origin, trip.destination, trip.mode);
   }
