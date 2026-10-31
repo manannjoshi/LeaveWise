@@ -8,10 +8,7 @@ export const metadata: Metadata = {
   description: "Know when to leave to arrive on time.",
   manifest: "/manifest.json",
   icons: {
-    icon: [
-      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
-    ],
+    icon: { url: "/icon.svg", type: "image/svg+xml" },
     apple: "/apple-touch-icon.png",
   },
   appleWebApp: { capable: true, title: "LeaveWise", statusBarStyle: "black-translucent" },
