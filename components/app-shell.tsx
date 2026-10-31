@@ -7,15 +7,70 @@ import type { ReactNode } from "react";
 
 const installDismissedUntilKey = "leavewise-install-dismissed-until";
 const dismissDurationMs = 14 * 24 * 60 * 60 * 1000;
+const themeStorageKey = "leavewise-theme";
 
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
+type IosInstallGuide = {
+  browser: string;
+  steps: string[];
+};
+
+function getIosInstallGuide(userAgent: string): IosInstallGuide {
+  // Check branded iOS browsers before Safari, since their user agents also include Safari.
+  if (/CriOS/i.test(userAgent)) {
+    return {
+      browser: "Chrome on iPhone",
+      steps: [
+        "Tap Share beside the address bar.",
+        "Tap Add to Home Screen. If you don't see it, scroll the share options or tap View More if it appears.",
+        "Tap Add to finish.",
+      ],
+    };
+  }
+  if (/FxiOS/i.test(userAgent)) {
+    return {
+      browser: "Firefox on iPhone",
+      steps: [
+        "Tap the Share icon in the address bar.",
+        "Tap Add to Home Screen. If you don't see it, scroll the share options or tap View More if it appears.",
+        "Tap Add to finish.",
+      ],
+    };
+  }
+  if (/EdgiOS/i.test(userAgent)) {
+    return { browser: "Edge on iPhone", steps: safariInstallSteps(true) };
+  }
+  if (/OPiOS/i.test(userAgent)) {
+    return { browser: "Opera on iPhone", steps: safariInstallSteps(true) };
+  }
+  if (/Brave/i.test(userAgent)) {
+    return { browser: "Brave on iPhone", steps: safariInstallSteps(true) };
+  }
+  if (/Safari/i.test(userAgent)) {
+    return { browser: "Safari on iPhone", steps: safariInstallSteps(false) };
+  }
+  return { browser: "your iPhone browser", steps: safariInstallSteps(true) };
+}
+
+function safariInstallSteps(useSafariFallback: boolean) {
+  const steps = [
+    "In Safari, open LeaveWise. Tap the page menu beside the address bar, then tap Share. If you already see the Share icon, tap it.",
+    "Scroll down the share sheet and tap Add to Home Screen. On some screens, tap View More first. If the option is missing, scroll to the bottom and add it from Edit Actions.",
+    "Tap Add to finish.",
+  ];
+  return useSafariFallback
+    ? ["Open this page in Safari, then follow these steps:", ...steps]
+    : steps;
+}
+
 type InstallContextValue = {
   isInstalled: boolean;
-  isIosSafariNotInstalled: boolean;
+  isIosBrowserNotInstalled: boolean;
+  iosInstallGuide: IosInstallGuide | null;
   canInstall: boolean;
   installApp: () => Promise<void>;
   showIosReminderHelp: () => boolean;
@@ -34,14 +89,16 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
-  const [isIosSafariNotInstalled, setIsIosSafariNotInstalled] = useState(false);
+  const [isIosBrowserNotInstalled, setIsIosBrowserNotInstalled] = useState(false);
+  const [iosInstallGuide, setIosInstallGuide] = useState<IosInstallGuide | null>(null);
   const [installDismissed, setInstallDismissed] = useState(false);
   const [showIosHelp, setShowIosHelp] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
     const appleMobile = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
       (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    const safari = /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS|EdgiOS/.test(navigator.userAgent);
+    const iosInstallGuide = appleMobile ? getIosInstallGuide(navigator.userAgent) : null;
     const androidChrome = /Android/.test(navigator.userAgent) && /Chrome/.test(navigator.userAgent) && !/EdgA|OPR/.test(navigator.userAgent);
     const displayMode = window.matchMedia("(display-mode: standalone)");
     const checkInstalled = () => displayMode.matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
@@ -57,7 +114,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
     };
 
     setIsInstalled(checkInstalled());
-    setIsIosSafariNotInstalled(appleMobile && safari && !checkInstalled());
+    setIsIosBrowserNotInstalled(appleMobile && !checkInstalled());
+    setIosInstallGuide(iosInstallGuide);
     setInstallDismissed(readDismissed());
 
     function onBeforeInstallPrompt(event: Event) {
@@ -68,7 +126,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
     }
     function onAppInstalled() {
       setIsInstalled(true);
-      setIsIosSafariNotInstalled(false);
+      setIsIosBrowserNotInstalled(false);
+      setIosInstallGuide(null);
       setInstallPrompt(null);
       setShowIosHelp(false);
     }
@@ -76,7 +135,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
       const installed = checkInstalled();
       setIsInstalled(installed);
       if (installed) {
-        setIsIosSafariNotInstalled(false);
+        setIsIosBrowserNotInstalled(false);
+        setIosInstallGuide(null);
         setInstallPrompt(null);
         setShowIosHelp(false);
       }
@@ -92,6 +152,27 @@ export default function AppShell({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    let savedTheme: "dark" | "light" = "dark";
+    try {
+      savedTheme = localStorage.getItem(themeStorageKey) === "light" ? "light" : "dark";
+    } catch {
+      // The toggle still works for this session when storage is unavailable.
+    }
+    setTheme(savedTheme);
+    document.documentElement.dataset.theme = savedTheme;
+  }, []);
+
+  function toggleTheme() {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+    try {
+      localStorage.setItem(themeStorageKey, nextTheme);
+    } catch {
+      // The selected theme remains active until the page is closed.
+    }
+  }
   // Treat the reduced visual viewport as an open mobile keyboard.
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -151,14 +232,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }
 
   function showIosReminderHelp() {
-    if (isInstalled || !isIosSafariNotInstalled || installDismissed) return false;
+    if (isInstalled || !isIosBrowserNotInstalled || installDismissed) return false;
     setShowIosHelp(true);
     return true;
   }
 
   const installContext: InstallContextValue = {
     isInstalled,
-    isIosSafariNotInstalled: isIosSafariNotInstalled && !isInstalled,
+    isIosBrowserNotInstalled: isIosBrowserNotInstalled && !isInstalled,
+    iosInstallGuide,
     canInstall: Boolean(installPrompt) && !isInstalled && !installDismissed,
     installApp,
     showIosReminderHelp,
@@ -168,6 +250,16 @@ export default function AppShell({ children }: { children: ReactNode }) {
     <div className="app-shell">
       <InstallContext.Provider value={installContext}>
         <div className="app-content">
+          <div className="site-header">
+            <div className="site-wordmark" aria-label="LeaveWise"><span>Leave</span><span className="site-wordmark-accent">Wise</span></div>
+            <button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+              {theme === "dark" ? (
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></svg>
+              ) : (
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.5A8.5 8.5 0 0 1 8.5 3.5 8.5 8.5 0 1 0 20.5 15.5Z" /></svg>
+              )}
+            </button>
+          </div>
           {pathname !== "/" && (
             <button type="button" className="back-button" onClick={() => router.push("/")} aria-label="Back to plan">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h11" /></svg>
@@ -177,12 +269,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
           {children}
         </div>
 
-        {showIosHelp && isIosSafariNotInstalled && !isInstalled && !installDismissed && (
+        {showIosHelp && isIosBrowserNotInstalled && !isInstalled && !installDismissed && iosInstallGuide && (
           <div className="place-sheet-backdrop" onClick={rememberDismissal}>
             <section className="place-sheet install-sheet" role="dialog" aria-modal="true" aria-labelledby="ios-install-title" onClick={(event) => event.stopPropagation()}>
               <div className="place-sheet-handle" />
-              <h2 id="ios-install-title" className="text-lg font-semibold">Install LeaveWise</h2>
-              <p className="mt-3 text-slate-500">To get reminders on iPhone, tap Share, then Add to Home Screen.</p>
+              <h2 id="ios-install-title" className="text-lg font-semibold">Install LeaveWise from {iosInstallGuide.browser}</h2>
+              <p className="mt-3 text-slate-500">To get reminders on iPhone:</p>
+              <ol className="mt-3 list-decimal space-y-2 pl-6 text-slate-500">
+                {iosInstallGuide.steps.map((step) => <li key={step}>{step}</li>)}
+              </ol>
               <button type="button" className="mt-5 min-h-11 w-full bg-emerald-900 px-5 py-3 text-sm font-semibold text-white" onClick={rememberDismissal}>Got it</button>
             </section>
           </div>

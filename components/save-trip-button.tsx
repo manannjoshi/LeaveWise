@@ -12,7 +12,7 @@ function decodeVapidKey(value: string) {
 }
 
 export default function SaveTripButton({ trip, historyResiduals }: { trip: TripRequest; historyResiduals: number[] }) {
-  const { isIosSafariNotInstalled, showIosReminderHelp } = useInstallFlow();
+  const { isIosBrowserNotInstalled, showIosReminderHelp } = useInstallFlow();
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -30,9 +30,9 @@ export default function SaveTripButton({ trip, historyResiduals }: { trip: TripR
     setMessage("");
     setIsError(false);
 
-    if (isIosSafariNotInstalled) {
+    if (isIosBrowserNotInstalled) {
       if (!showIosReminderHelp()) {
-        setMessage("To enable iPhone reminders, add LeaveWise to your Home Screen from Safari.");
+        setMessage("To enable iPhone reminders, add LeaveWise to your Home Screen.");
       }
       return;
     }

@@ -8,6 +8,7 @@ import { addTripHistoryEntry, clearActiveTrip, getCalibrationResiduals, makeTrip
 import type { ActiveTrip, TripHistoryEntry } from "@/lib/trip-history";
 import SaveTripButton from "@/components/save-trip-button";
 import InstallAppButton from "@/components/install-app-button";
+import ArriveByPicker from "@/components/arrive-by-picker";
 
 type PlaceFieldProps = {
   title: string;
@@ -136,7 +137,7 @@ export default function TripForm() {
       setArriveBy(toLocalDateTimeInputValue(new Date(savedTrip.trip.arriveBy)));
       setMode(savedTrip.trip.mode);
       setImportance(savedTrip.trip.importance);
-      setBuffer(savedTrip.trip.fixedBufferMinutes ?? 0);
+      setBuffer(Math.min(25, Math.max(0, savedTrip.trip.fixedBufferMinutes ?? 0)));
       setPlan(savedTrip.plan);
     }
 
@@ -389,7 +390,6 @@ export default function TripForm() {
           >
             {parsing ? "Reading your trip…" : "Fill trip details"}
           </button>
-          <p className="mt-2 text-sm text-emerald-900/80">Your sentence and timezone go to Groq to fill the form. Review the trip before planning.</p>
           {parseMessage && <p role="status" className="mt-2 text-sm font-medium text-emerald-900">{parseMessage}</p>}
           {parseError && <p role="alert" className="mt-2 text-sm font-medium text-red-700">{parseError}</p>}
           {needsOriginConfirmation && (
@@ -438,37 +438,32 @@ export default function TripForm() {
 
         <div className="form-row">
           <label className="mb-2 block text-sm font-semibold" htmlFor="arriveBy">Arrive by</label>
-          <div className="mb-3 flex flex-wrap gap-2" aria-label="Quick arrival times">
+          <div className="arrival-quick-picks" aria-label="Quick arrival times">
             {[
-              { label: "In 30 min", minutes: 30 },
+              { label: "In 30 minutes", minutes: 30 },
               { label: "In 1 hour", minutes: 60 },
               { label: "In 2 hours", minutes: 120 },
-              { label: "Tomorrow 9 AM", minutes: null },
+              { label: "Tomorrow at 9 AM", minutes: null },
             ].map((choice) => (
               <button
                 key={choice.label}
                 type="button"
                 onClick={() => chooseArrivalTime(choice.minutes === null ? tomorrowAtNineLocal() : arrivalInMinutes(choice.minutes))}
-                className="min-h-11 rounded-full border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
+                className="arrival-quick-pick min-h-11 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
               >
                 {choice.label}
               </button>
             ))}
           </div>
-          <input
-            id="arriveBy"
-            className={inputClass}
-            type="datetime-local"
+          <ArriveByPicker
             value={arriveBy}
-            min={toLocalDateTimeInputValue(new Date())}
-            aria-invalid={Boolean(arriveByError)}
-            aria-describedby={arriveByError ? "arriveByError" : undefined}
-            onChange={(event) => {
-              setArriveBy(event.target.value);
-              setArriveByError(event.target.value ? arriveByValidationError(event.target.value) : "");
+            invalid={Boolean(arriveByError)}
+            describedBy={arriveByError ? "arriveByError" : undefined}
+            onChange={(value) => {
+              setArriveBy(value);
+              setArriveByError(arriveByValidationError(value));
               setPlan(null);
             }}
-            required
           />
           {arriveByError && <p id="arriveByError" role="alert" className="mt-2 text-sm font-medium text-red-700">{arriveByError}</p>}
         </div>
@@ -492,11 +487,39 @@ export default function TripForm() {
         </div>
 
         <details className="rounded-xl bg-slate-50 px-4 py-3">
-          <summary className="cursor-pointer text-sm font-semibold">More options, fixed buffer {buffer} min</summary>
+          <summary className="cursor-pointer text-sm font-semibold">Fixed buffer</summary>
           <div className="mt-3">
-            <label className="mb-2 block text-sm font-medium" htmlFor="buffer">Fixed buffer (minutes)</label>
-            <input id="buffer" className={inputClass} type="number" min="0" max="180" value={buffer} onChange={(event) => { setBuffer(Number(event.target.value)); setPlan(null); }} required />
-            <p className="mt-1 text-xs text-slate-500">Defaults: car 8, two-wheeler 5, walk 0 minutes.</p>
+            <div className="buffer-control-heading">
+              <label htmlFor="buffer">Fixed buffer</label>
+              <output htmlFor="buffer" aria-live="polite">{buffer} min</output>
+            </div>
+            <div className="buffer-slider-row">
+              <button
+                type="button"
+                className="buffer-step-button"
+                aria-label="Decrease fixed buffer by one minute"
+                disabled={buffer <= 0}
+                onClick={() => { setBuffer((current) => Math.max(0, current - 1)); setPlan(null); }}
+              >−</button>
+              <input
+                id="buffer"
+                className="buffer-range"
+                type="range"
+                min="0"
+                max="25"
+                step="1"
+                value={buffer}
+                aria-valuetext={`${buffer} minutes fixed buffer`}
+                onChange={(event) => { setBuffer(Number(event.target.value)); setPlan(null); }}
+              />
+              <button
+                type="button"
+                className="buffer-step-button"
+                aria-label="Increase fixed buffer by one minute"
+                disabled={buffer >= 25}
+                onClick={() => { setBuffer((current) => Math.min(25, current + 1)); setPlan(null); }}
+              >+</button>
+            </div>
           </div>
         </details>
 
@@ -573,7 +596,7 @@ function ChoiceButton({ label, detail, selected, onClick }: { label: string; det
       className={`min-h-14 rounded-xl border px-2 py-2 text-sm font-semibold transition ${selected ? "border-emerald-900 bg-emerald-900 text-white" : "border-slate-300 bg-white text-slate-800 hover:border-emerald-700"}`}
     >
       <span className="block">{label}</span>
-      {detail && <span className={`mt-0.5 block text-xs ${selected ? "text-emerald-100" : "text-slate-500"}`}>{detail} target</span>}
+      {detail && <span className={`mt-0.5 block text-xs ${selected ? "choice-detail-selected" : "text-slate-500"}`}>{detail} target</span>}
     </button>
   );
 }
