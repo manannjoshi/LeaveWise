@@ -8,9 +8,9 @@ export const maxDuration = 30;
 const schema = {
   type: "object",
   properties: {
-    origin: { type: "string" },
+    origin: { type: "string", description: "Starting place, or an empty string if the user did not say one." },
     destination: { type: "string" },
-    arriveBy: { type: "string", description: "RFC3339 date and time with timezone offset, or empty when missing." },
+    arriveBy: { type: "string", description: "Future local timestamp YYYY-MM-DDTHH:mm:ss in the user's timezone, or empty when missing." },
     mode: { type: "string", enum: ["car", "two-wheeler", "walk"] },
     importance: { type: "string", enum: ["casual", "important", "critical"] },
   },
@@ -26,16 +26,68 @@ type ParsedTrip = {
   importance: Importance;
 };
 
-function validParsedTrip(value: unknown): value is ParsedTrip {
-  if (!value || typeof value !== "object") return false;
+// Convert a local date/time from the user's timezone into a UTC ISO timestamp.
+function localDateTimeToIso(value: string, timeZone: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value);
+  if (!match) return null;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText = "0"] = match;
+  const localParts = [yearText, monthText, dayText, hourText, minuteText, secondText].map(Number);
+  const [year, month, day, hour, minute, second] = localParts;
+  const localAsUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+  const isValidDate = new Date(localAsUtc).toISOString().startsWith(
+    `${yearText}-${monthText}-${dayText}T${hourText}:${minuteText}:${secondText.padStart(2, "0")}`,
+  );
+  if (!isValidDate) return null;
+
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+
+  // Two passes account for timezone offsets, including daylight saving changes.
+  let utcGuess = localAsUtc;
+  for (let pass = 0; pass < 2; pass += 1) {
+    const zoned = Object.fromEntries(formatter.formatToParts(new Date(utcGuess)).map((part) => [part.type, part.value]));
+    const representedAsUtc = Date.UTC(
+      Number(zoned.year), Number(zoned.month) - 1, Number(zoned.day),
+      Number(zoned.hour), Number(zoned.minute), Number(zoned.second),
+    );
+    utcGuess += localAsUtc - representedAsUtc;
+  }
+
+  const check = Object.fromEntries(formatter.formatToParts(new Date(utcGuess)).map((part) => [part.type, part.value]));
+  if (year !== Number(check.year) || month !== Number(check.month) || day !== Number(check.day) ||
+      hour !== Number(check.hour) || minute !== Number(check.minute) || second !== Number(check.second)) return null;
+  return new Date(utcGuess).toISOString();
+}
+
+function normalizeArriveBy(value: unknown, timeZone: string) {
+  if (typeof value !== "string") return null;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) {
+    const timestamp = Date.parse(value);
+    return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+  }
+  return localDateTimeToIso(value, timeZone);
+}
+
+function tripValidationIssue(value: unknown, allowMissingOrigin = false): string | null {
+  if (!value || typeof value !== "object") return "invalid_object";
   const trip = value as Partial<ParsedTrip>;
-  const isoWithZone = typeof trip.arriveBy === "string" &&
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2})$/.test(trip.arriveBy);
-  return typeof trip.origin === "string" && trip.origin.trim().length > 0 && trip.origin.length <= 160 &&
-    typeof trip.destination === "string" && trip.destination.trim().length > 0 && trip.destination.length <= 160 &&
-    isoWithZone && Number.isFinite(Date.parse(trip.arriveBy!)) && Date.parse(trip.arriveBy!) > Date.now() &&
-    ["car", "two-wheeler", "walk"].includes(trip.mode ?? "") &&
-    ["casual", "important", "critical"].includes(trip.importance ?? "");
+  const hasOrigin = typeof trip.origin === "string" && trip.origin.trim().length > 0;
+  if (!allowMissingOrigin && !hasOrigin) return "invalid_origin";
+  if (hasOrigin && trip.origin!.length > 160) return "invalid_origin";
+  if (typeof trip.destination !== "string" || !trip.destination.trim() || trip.destination.length > 160) return "invalid_destination";
+  if (typeof trip.arriveBy !== "string" || !Number.isFinite(Date.parse(trip.arriveBy))) return "invalid_arrival_time";
+  if (Date.parse(trip.arriveBy) <= Date.now()) return "arrival_time_not_future";
+  if (!["car", "two-wheeler", "walk"].includes(trip.mode ?? "")) return "invalid_travel_mode";
+  if (!["casual", "important", "critical"].includes(trip.importance ?? "")) return "invalid_importance";
+  return null;
 }
 
 function validTimeZone(value: unknown): value is string {
@@ -74,8 +126,8 @@ export async function POST(request: Request) {
   const prompt = [
     "Extract a single trip from the user's sentence.",
     `Current instant: ${new Date().toISOString()}. User timezone: ${input.timeZone}.`,
-    "Resolve relative days and times (such as Friday at 6am) to a future RFC3339 timestamp with the correct timezone offset.",
-    "Do not invent a missing origin, destination, or arrival time. If the user does not specify a travel mode use car; if they do not specify importance use important.",
+    "Resolve relative days and times (such as Friday at 6am) to a future local timestamp in the user's timezone, formatted YYYY-MM-DDTHH:mm:ss WITHOUT a timezone or offset. Do not output a named timezone.",
+    "Do not invent a missing origin, destination, or arrival time. If the origin is missing, return origin as an empty string so the app can ask whether to use the user's current location. If the user does not specify a travel mode use car; if they do not specify importance use important.",
     "Keep origin and destination as concise place names exactly specific enough for a place search. If the user says a personal place such as 'my hostel' and no address is given, preserve that phrase; do not guess its address.",
     "Return the JSON fields required by the schema.",
     `Trip description: ${JSON.stringify(input.text.trim())}`,
@@ -83,11 +135,22 @@ export async function POST(request: Request) {
 
   try {
     const trip = await generateGroqJson<ParsedTrip>(prompt, schema, 1_000, 12_000);
-    if (!validParsedTrip(trip)) {
+    const normalizedArriveBy = normalizeArriveBy(trip?.arriveBy, input.timeZone);
+    const normalizedTrip = { ...trip, arriveBy: normalizedArriveBy ?? "" };
+    const needsOrigin = typeof normalizedTrip.origin !== "string" || !normalizedTrip.origin.trim();
+    const validationIssue = tripValidationIssue(normalizedTrip, needsOrigin);
+    if (validationIssue) {
+      // This diagnostic contains no place names, prompt text, or other personal trip data.
+      console.info("Groq trip fields rejected", { reason: validationIssue });
       return NextResponse.json({ error: "I couldn't confidently find two places and a future arrival time. Fill in the trip form below." }, { status: 422 });
     }
     return NextResponse.json({
-      trip: { ...trip, origin: trip.origin.trim(), destination: trip.destination.trim() },
+      needsOrigin,
+      trip: {
+        ...normalizedTrip,
+        origin: typeof normalizedTrip.origin === "string" ? normalizedTrip.origin.trim() : "",
+        destination: normalizedTrip.destination.trim(),
+      },
     });
   } catch (error) {
     const code = error instanceof GroqError ? error.code : "unexpected";

@@ -101,6 +101,7 @@ export default function TripForm() {
   const [parsing, setParsing] = useState(false);
   const [parseMessage, setParseMessage] = useState("");
   const [parseError, setParseError] = useState("");
+  const [needsOriginConfirmation, setNeedsOriginConfirmation] = useState(false);
   const [geocodingSource, setGeocodingSource] = useState<"tomtom" | "mock" | null>(null);
   const [arrivalLogMessage, setArrivalLogMessage] = useState("");
   const [arrivalLogError, setArrivalLogError] = useState("");
@@ -164,14 +165,14 @@ export default function TripForm() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Could not read that trip. Fill in the form below.");
-      if (!data.trip || typeof data.trip.origin !== "string" || typeof data.trip.destination !== "string" || !data.trip.arriveBy) {
+      if (!data.trip || typeof data.trip.destination !== "string" || !data.trip.arriveBy) {
         throw new Error("Could not find both places and an arrival time. Fill in the form below.");
       }
 
       setOrigin(null);
-      setDestination(null);
-      setOriginText(data.trip.origin);
+      setOriginText(typeof data.trip.origin === "string" ? data.trip.origin : "");
       setDestinationText(data.trip.destination);
+      setDestination(null);
       setArriveBy(toLocalDateTimeInputValue(new Date(data.trip.arriveBy)));
       setArriveByError("");
       changeMode(data.trip.mode);
@@ -179,7 +180,27 @@ export default function TripForm() {
       setPlan(null);
       setError("");
       setGeocodingSource(null);
-      setParseMessage("Trip details filled in. Choose a place suggestion for each location, then review the time.");
+      setNeedsOriginConfirmation(Boolean(data.needsOrigin));
+
+      if (data.needsOrigin) {
+        // Resolve the destination from TomTom so the user can continue with taps, not typing.
+        try {
+          const placeResponse = await fetch(`/api/places?q=${encodeURIComponent(data.trip.destination)}`);
+          const placeData = await placeResponse.json();
+          if (placeData.source === "tomtom" && placeData.places?.[0]) {
+            setDestination(placeData.places[0]);
+            setDestinationText(placeData.places[0].label);
+            setGeocodingSource("tomtom");
+          } else {
+            setGeocodingSource("mock");
+          }
+        } catch {
+          setGeocodingSource("mock");
+        }
+        setParseMessage("");
+      } else {
+        setParseMessage("Trip details filled in. Choose a place suggestion for each location, then review the time.");
+      }
     } catch (reason) {
       setParseError(reason instanceof Error ? reason.message : "Could not read that trip. Fill in the form below.");
     } finally {
@@ -288,6 +309,10 @@ export default function TripForm() {
         setOriginText(place.label);
         setPlan(null);
         setGeocodingSource(null);
+        if (needsOriginConfirmation) {
+          setNeedsOriginConfirmation(false);
+          setParseMessage("Location added as your starting point. Check the trip details, then tap When should I leave?");
+        }
         setLocationBusy(false);
       },
       (reason) => {
@@ -352,6 +377,19 @@ export default function TripForm() {
           <p className="mt-2 text-xs text-emerald-900/80">Your sentence and timezone go to Groq to fill the form. Review the details and select both places before planning.</p>
           {parseMessage && <p role="status" className="mt-2 text-sm font-medium text-emerald-900">{parseMessage}</p>}
           {parseError && <p role="alert" className="mt-2 text-sm font-medium text-red-700">{parseError}</p>}
+          {needsOriginConfirmation && (
+            <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3" role="status">
+              <p className="text-sm font-semibold text-amber-950">I couldn&apos;t find a starting point. Would you like to use your current location?</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" onClick={useCurrentLocation} disabled={locationBusy} className="min-h-11 rounded-lg bg-emerald-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
+                  {locationBusy ? "Finding location…" : "Use my location"}
+                </button>
+                <button type="button" onClick={() => { setNeedsOriginConfirmation(false); document.getElementById("Origin")?.focus(); }} className="min-h-11 rounded-lg border border-amber-400 bg-white px-4 py-2 text-sm font-semibold text-amber-950">
+                  I&apos;ll enter it
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         <div className="flex items-center gap-3 pt-1" aria-hidden="true">
