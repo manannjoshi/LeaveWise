@@ -5,4 +5,5 @@ node_modules/
 out/
 .env*
 !.env.example
+FORLLMS.TXT
 npm-debug.log*
