@@ -2,6 +2,14 @@
 export type TravelMode = "car" | "two-wheeler" | "walk";
 export type Importance = "casual" | "important" | "critical";
 export type WeatherStatus = "rain" | "clear" | "unavailable";
+export type WeatherIconKind = "sun" | "moon" | "partly-cloudy" | "cloudy" | "fog" | "drizzle" | "rain" | "snow" | "storm";
+
+export type DepartureWeather = {
+  condition: string;
+  icon: WeatherIconKind;
+  temperatureC: number | null;
+  precipitationProbability: number | null;
+};
 
 export type Place = {
   label: string;
@@ -26,6 +34,7 @@ export type LeavePlan = {
   fixedBufferMinutes: number;
   weatherPenaltyMinutes: number;
   weatherStatus: WeatherStatus;
+  departureWeather?: DepartureWeather | null;
   safetyMarginMethod: "percentage" | "learned";
   safetyMarginSampleCount: number;
   confidence: number;

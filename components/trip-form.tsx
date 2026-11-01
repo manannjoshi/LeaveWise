@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import type { Importance, LeavePlan, Place, TravelMode, TripRequest } from "@/lib/trip";
+import type { Importance, LeavePlan, Place, TravelMode, TripRequest, WeatherIconKind } from "@/lib/trip";
 import { arrivalInMinutes, arriveByValidationError, toLocalDateTimeInputValue, tomorrowAtNineLocal } from "@/lib/date-time";
 import { addPlannedTrip, addTripHistoryEntry, clearActiveTrip, getCalibrationResiduals, makeTripHistoryEntry, readActiveTrip, readTripHistory, saveActiveTrip } from "@/lib/trip-history";
 import type { ActiveTrip, TripHistoryEntry } from "@/lib/trip-history";
 import { readUserPreferences, saveUserPreferences } from "@/lib/user-preferences";
 import type { UsualTrip } from "@/lib/user-preferences";
 import SaveTripButton from "@/components/save-trip-button";
-import InstallAppButton from "@/components/install-app-button";
 import ArriveByPicker from "@/components/arrive-by-picker";
+import WeatherIcon from "@/components/weather-icon";
 
 type PlaceFieldProps = {
   title: string;
@@ -414,7 +414,6 @@ export default function TripForm() {
         <fieldset disabled={Boolean(activeTrip)} className="space-y-5 disabled:opacity-70">
         <section className="rounded-2xl bg-emerald-50/70 p-4 sm:p-5" aria-labelledby="quick-trip-title">
           <label id="quick-trip-title" className="block text-base font-bold text-emerald-950" htmlFor="naturalTrip">Describe your trip</label>
-          <p className="mt-1 text-sm text-emerald-900">For example: “Be at the airport by 6am Friday from my hostel.”</p>
           <textarea
             id="naturalTrip"
             className={`${inputClass} mt-3 min-h-24 resize-y border-emerald-200 bg-white`}
@@ -596,11 +595,37 @@ export default function TripForm() {
               value={mode === "car" ? "Not applied (car)" : plan.weatherPenaltyMinutes > 0 ? `+${plan.weatherPenaltyMinutes} min` : plan.weatherStatus === "unavailable" ? "Unknown" : "None"}
             />
           </div>
+          <section className="mt-4 flex items-center gap-4 rounded-xl bg-white/10 p-4" aria-label="Weather at departure">
+            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-white/10">
+              {plan.departureWeather ? (
+                <WeatherIcon kind={plan.departureWeather.icon} className={`h-10 w-10 ${weatherIconColor(plan.departureWeather.icon)}`} />
+              ) : (
+                <WeatherIcon kind="cloudy" className="h-10 w-10 text-slate-400" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-emerald-200">Weather at departure</p>
+              {plan.departureWeather ? (
+                <>
+                  <p className="mt-0.5 text-lg font-semibold">
+                    {plan.departureWeather.condition}
+                    {plan.departureWeather.temperatureC !== null && ` · ${Math.round(plan.departureWeather.temperatureC)}°C`}
+                  </p>
+                  <p className="text-sm text-emerald-100">
+                    At your starting point · {prettyTime(plan.leaveAt)}
+                    {plan.departureWeather.precipitationProbability !== null && ` · ${Math.round(plan.departureWeather.precipitationProbability)}% chance of precipitation`}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-0.5 text-sm">Forecast unavailable</p>
+              )}
+            </div>
+          </section>
           <p className="mt-5 text-sm text-emerald-100">{plan.explanation}</p>
-          {plan.source === "mock" && <p className="mt-3 rounded-lg bg-white/10 px-3 py-2 text-xs text-emerald-100">Sample estimate: add a TomTom key for live traffic-aware routing.</p>}
+          {plan.source === "mock" && <p className="mt-3 rounded-lg bg-white/10 px-3 py-2 text-xs text-emerald-100">Sample estimate</p>}
           <section className="mt-5 rounded-xl bg-white/10 p-4">
             <h2 className="text-sm font-semibold">After your trip</h2>
-            <p className="mt-1 text-sm text-emerald-100">Predicted {plan.durationMinutes} min. Start the timer when you leave, then tap once when you arrive.</p>
+            <p className="mt-1 text-sm text-emerald-100">Tap when you leave, then tap again when you arrive.</p>
             {activeTrip ? (
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-emerald-100">Timer running | {Math.max(0, Math.floor((clock - Date.parse(activeTrip.startedAt)) / 60_000))} min elapsed</p>
@@ -624,7 +649,6 @@ export default function TripForm() {
             importance,
             fixedBufferMinutes: buffer,
           }} />}
-          <InstallAppButton className="mt-3 w-full" />
         </section>
       )}
       </div>
@@ -656,4 +680,12 @@ function ChoiceButton({ label, detail, selected, onClick }: { label: string; det
 
 function Stat({ label, value, status }: { label: string; value: string; status?: "good" | "tight" | "risky" }) {
   return <div className="rounded-xl bg-white/10 p-3"><p className="text-sm text-emerald-200">{label}</p><p className="mt-1 text-lg font-semibold">{status && <span className={`confidence-dot ${status}`} aria-hidden="true" />}{value}</p></div>;
+}
+
+function weatherIconColor(kind: WeatherIconKind) {
+  if (kind === "sun" || kind === "moon") return "text-amber-300";
+  if (kind === "storm") return "text-yellow-300";
+  if (kind === "snow") return "text-sky-200";
+  if (kind === "fog" || kind === "cloudy") return "text-slate-300";
+  return "text-sky-300";
 }

@@ -34,15 +34,21 @@ self.addEventListener("push", (event) => {
   event.waitUntil(self.registration.showNotification(payload.title || "LeaveWise", {
     body: payload.body || "Your trip plan has been updated.",
     icon: "/icon-192.png",
-    badge: "/icon-192.png",
+    badge: "/notification-badge.svg",
     tag: payload.tripId ? `trip-${payload.tripId}` : "trip-update",
     renotify: true,
+    requireInteraction: payload.urgent === true,
+    actions: [
+      { action: "open", title: "Open LeaveWise" },
+      { action: "dismiss", title: "Dismiss" },
+    ],
     data: { url: payload.url || "/" },
   }));
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  if (event.action === "dismiss") return;
   const target = new URL(event.notification.data?.url || "/", self.location.origin).href;
   event.waitUntil(clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
     const existing = windows.find((client) => client.url === target);

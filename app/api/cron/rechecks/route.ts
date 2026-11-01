@@ -33,21 +33,21 @@ function updateMessage(input: {
   const newLeave = Date.parse(input.plan.leaveAt);
   const earlierMinutes = Math.round((Date.parse(input.oldLeaveAt) - newLeave) / 60_000);
   if (newLeave <= Date.now()) {
-    return { title: "Leave now", body: `Your updated plan says it's time to leave for ${input.destination}.` };
+    return { title: "Time to leave", body: `Head to ${input.destination} now to stay on time.` };
   }
   if (earlierMinutes > 0) {
     if (input.plan.durationMinutes > input.oldDuration) {
-      return { title: "Leave earlier", body: `Traffic worsened, leave ${earlierMinutes} min earlier.` };
+      return { title: "Traffic is heavier", body: `Leave ${earlierMinutes} min earlier to stay on time.` };
     }
     if (input.plan.weatherPenaltyMinutes > input.oldWeatherPenalty) {
-      return { title: "Rain near departure", body: `Rain is forecast; leave ${earlierMinutes} min earlier.` };
+      return { title: "Rain could slow you down", body: `Leave ${earlierMinutes} min earlier to stay on time.` };
     }
-    return { title: "Leave earlier", body: `Conditions changed, leave ${earlierMinutes} min earlier.` };
+    return { title: "Your trip changed", body: `Leave ${earlierMinutes} min earlier to stay on time.` };
   }
   if (earlierMinutes < 0) {
-    return { title: "Updated trip time", body: `Conditions improved. Leave at ${formatTime(input.plan.leaveAt, input.timeZone)}.` };
+    return { title: "Good news, traffic improved", body: `Your updated leave time is ${formatTime(input.plan.leaveAt, input.timeZone)}.` };
   }
-  return { title: "Trip check-in", body: `You're still on track. Leave at ${formatTime(input.plan.leaveAt, input.timeZone)}.` };
+  return { title: "You're on track", body: `Leave at ${formatTime(input.plan.leaveAt, input.timeZone)} for ${input.destination}.` };
 }
 
 async function processRecheck(admin: ReturnType<typeof getSupabaseAdmin>, check: Recheck) {
@@ -132,6 +132,7 @@ async function processRecheck(admin: ReturnType<typeof getSupabaseAdmin>, check:
       ...message,
       tripId: trip.id,
       url: "/",
+      urgent: planPassed,
     }), { TTL: 3600 });
   } catch (error) {
     const statusCode = (error as { statusCode?: number }).statusCode;

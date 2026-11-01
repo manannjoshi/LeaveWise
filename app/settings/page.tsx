@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import InstallAppButton from "@/components/install-app-button";
 import { clearCompletedTripLogs, clearPlannedTrips, readPlannedTrips, readTripHistory } from "@/lib/trip-history";
 import { DEFAULT_USER_PREFERENCES, readUserPreferences, saveUserPreferences } from "@/lib/user-preferences";
 import type { UserPreferences } from "@/lib/user-preferences";
@@ -80,11 +79,9 @@ export default function SettingsPage() {
   return (
     <main className="px-4 py-5">
       <h1 className="mt-3">Settings</h1>
-      <p className="mt-2 text-slate-600">Make your next trip quicker to plan.</p>
 
       <section className="settings-section mt-6 rounded-2xl bg-white p-4 sm:p-5" aria-labelledby="defaults-heading">
         <h2 id="defaults-heading" className="text-lg font-semibold">My defaults</h2>
-        <p className="mt-1 text-sm text-slate-500">New trips will start with these choices.</p>
 
         <div className="settings-control mt-5">
           <p className="settings-label" id="travel-mode-label">Usual way to travel</p>
@@ -117,18 +114,13 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="settings-section mt-4 rounded-2xl bg-white p-4 sm:p-5" aria-labelledby="usual-trip-heading">
-        <h2 id="usual-trip-heading" className="text-lg font-semibold">My usual trip</h2>
-        {preferences.usualTrip ? (
-          <>
-            <p className="mt-2 font-medium">{preferences.usualTrip.origin.label} → {preferences.usualTrip.destination.label}</p>
-            <p className="mt-1 text-sm text-slate-500">Saved on this device.</p>
-            <button type="button" className="settings-secondary-button mt-3" onClick={() => updatePreferences({ ...preferences, usualTrip: null })}>Remove usual trip</button>
-          </>
-        ) : (
-          <p className="mt-2 text-sm text-slate-500">After planning a trip, tap “Save as my usual trip” to use it again with one tap.</p>
-        )}
-      </section>
+      {preferences.usualTrip && (
+        <section className="settings-section mt-4 rounded-2xl bg-white p-4 sm:p-5" aria-labelledby="usual-trip-heading">
+          <h2 id="usual-trip-heading" className="text-lg font-semibold">My usual trip</h2>
+          <p className="mt-2 font-medium">{preferences.usualTrip.origin.label} → {preferences.usualTrip.destination.label}</p>
+          <button type="button" className="settings-secondary-button mt-3" onClick={() => updatePreferences({ ...preferences, usualTrip: null })}>Remove usual trip</button>
+        </section>
+      )}
 
       <section className="settings-section mt-4 rounded-2xl bg-white p-4 sm:p-5" aria-labelledby="trip-data-heading">
         <h2 id="trip-data-heading" className="text-lg font-semibold">My trip data</h2>
@@ -144,7 +136,6 @@ export default function SettingsPage() {
       </section>
 
       {message && <p role="status" className="mt-3 text-sm text-slate-500">{message}</p>}
-      <InstallAppButton className="mt-5 w-full" />
     </main>
   );
 }

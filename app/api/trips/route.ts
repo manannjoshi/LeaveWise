@@ -172,8 +172,8 @@ export async function POST(request: Request) {
       endpoint: subscription.endpoint,
       keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth },
     }, JSON.stringify({
-      title: "Reminders are on",
-      body: "LeaveWise will check your trip and send an update before you leave.",
+      title: "You're all set",
+      body: `Reminders are on for ${trip.destination.label}. We'll check conditions before you leave.`,
       tripId: savedTrip.id,
       url: "/",
     }), { TTL: 300 });

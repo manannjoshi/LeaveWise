@@ -40,7 +40,6 @@ export default function EvaluationDashboard() {
         <div className="mt-6">
           <div>
             <h1 className="mt-2">Trips</h1>
-            <p className="mt-2 max-w-2xl text-slate-600">Compare the app recommendation with raw ETA + 10 minutes using the actual duration you logged.</p>
           </div>
         </div>
 
@@ -68,16 +67,11 @@ export default function EvaluationDashboard() {
           <Metric label="Baseline mean arrival error" value={formatError(metrics.baselineMeanArrivalErrorMinutes)} />
         </section>
 
-        <p className="mt-4 text-sm text-slate-600">
-          Compared {metrics.liveTripCount} completed live-routing trip{metrics.liveTripCount === 1 ? "" : "s"}.
-          {metrics.excludedMockCount > 0 && ` ${metrics.excludedMockCount} sample-route log${metrics.excludedMockCount === 1 ? " was" : "s were"} excluded from the raw-API baseline.`}
-          {" "}Arrival error is actual duration minus the time budget each recommendation allowed; positive means late, zero or negative means on time. This comparison assumes each strategy starts at its recommended time and the logged duration applies.
-        </p>
-        <p className="mt-2 text-sm text-slate-500">Planned trips and completed logs are stored on this device.</p>
+        <p className="mt-4 text-sm text-slate-500">Based on {metrics.liveTripCount} live trips. Positive arrival error means you arrived late.</p>
 
         <DisclosureSection title={`Completed trip logs (${entries.length})`} ariaLabel="Completed trip logs" className="mt-6">
           {entries.length === 0 ? (
-            <p className="px-4 py-8 text-sm text-slate-600 sm:px-6">No trips logged yet. Plan a trip, enter its actual duration after arriving, and press “I arrived.”</p>
+            <p className="px-4 py-8 text-sm text-slate-600 sm:px-6">After a trip, tap “I arrived” to log it.</p>
           ) : (
             <ul>
               {[...entries].reverse().map((entry) => (

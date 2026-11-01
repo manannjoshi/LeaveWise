@@ -69,6 +69,7 @@ function safariInstallSteps(useSafariFallback: boolean) {
 
 type InstallContextValue = {
   isInstalled: boolean;
+  installStateReady: boolean;
   isIosBrowserNotInstalled: boolean;
   iosInstallGuide: IosInstallGuide | null;
   canInstall: boolean;
@@ -89,6 +90,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [installStateReady, setInstallStateReady] = useState(false);
   const [isIosBrowserNotInstalled, setIsIosBrowserNotInstalled] = useState(false);
   const [iosInstallGuide, setIosInstallGuide] = useState<IosInstallGuide | null>(null);
   const [installDismissed, setInstallDismissed] = useState(false);
@@ -99,7 +101,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
     const appleMobile = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
       (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     const iosInstallGuide = appleMobile ? getIosInstallGuide(navigator.userAgent) : null;
-    const androidChrome = /Android/.test(navigator.userAgent) && /Chrome/.test(navigator.userAgent) && !/EdgA|OPR/.test(navigator.userAgent);
     const displayMode = window.matchMedia("(display-mode: standalone)");
     const checkInstalled = () => displayMode.matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
     const readDismissed = () => {
@@ -114,18 +115,20 @@ export default function AppShell({ children }: { children: ReactNode }) {
     };
 
     setIsInstalled(checkInstalled());
+    setInstallStateReady(true);
     setIsIosBrowserNotInstalled(appleMobile && !checkInstalled());
     setIosInstallGuide(iosInstallGuide);
     setInstallDismissed(readDismissed());
 
     function onBeforeInstallPrompt(event: Event) {
       event.preventDefault();
-      if (androidChrome && !checkInstalled() && !readDismissed()) {
+      if (!checkInstalled() && !readDismissed()) {
         setInstallPrompt(event as InstallPromptEvent);
       }
     }
     function onAppInstalled() {
       setIsInstalled(true);
+      setInstallStateReady(true);
       setIsIosBrowserNotInstalled(false);
       setIosInstallGuide(null);
       setInstallPrompt(null);
@@ -134,6 +137,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     function onDisplayModeChange() {
       const installed = checkInstalled();
       setIsInstalled(installed);
+      setInstallStateReady(true);
       if (installed) {
         setIsIosBrowserNotInstalled(false);
         setIosInstallGuide(null);
@@ -239,6 +243,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   const installContext: InstallContextValue = {
     isInstalled,
+    installStateReady,
     isIosBrowserNotInstalled: isIosBrowserNotInstalled && !isInstalled,
     iosInstallGuide,
     canInstall: Boolean(installPrompt) && !isInstalled && !installDismissed,
@@ -277,9 +282,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        <nav className="bottom-tabs" aria-label="Main navigation">
+        <nav className="bottom-tabs" aria-label="Main navigation" style={{ gridTemplateColumns: `repeat(${installStateReady && !isInstalled ? 4 : 3}, minmax(0, 1fr))` }}>
           <Tab href="/" active={pathname === "/"} label="Plan" icon="plan" />
           <Tab href="/evaluation" active={pathname === "/evaluation"} label="Trips" icon="trips" />
+          {installStateReady && !isInstalled && <Tab href="/install" active={pathname === "/install"} label="Install" icon="install" />}
           <Tab href="/settings" active={pathname === "/settings"} label="Settings" icon="settings" />
         </nav>
       </InstallContext.Provider>
@@ -287,12 +293,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-function Tab({ href, active, label, icon }: { href: string; active: boolean; label: string; icon: "plan" | "trips" | "settings" }) {
+function Tab({ href, active, label, icon }: { href: string; active: boolean; label: string; icon: "plan" | "trips" | "install" | "settings" }) {
   return (
     <Link href={href} className={`tab-link${active ? " is-active" : ""}`} aria-current={active ? "page" : undefined}>
       <svg viewBox="0 0 24 24" aria-hidden="true">
         {icon === "plan" && <><path d="M3 11.5 12 4l9 7.5" /><path d="M5.5 10v10h13V10M9 20v-6h6v6" /></>}
         {icon === "trips" && <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.5 2" /></>}
+        {icon === "install" && <><path d="M12 3v11m0 0 4-4m-4 4-4-4" /><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" /></>}
         {icon === "settings" && <><circle cx="12" cy="12" r="3" /><path d="m19.4 15 .1.1 1.1 1.9-2 3.4-2.2-.7a8 8 0 0 1-2 .9L14 23h-4l-.4-2.4a8 8 0 0 1-2-.9l-2.2.7-2-3.4 1.2-1.9a8 8 0 0 1 0-2.2l-1.2-1.9 2-3.4 2.2.7a8 8 0 0 1 2-.9L10 5h4l.4 2.4a8 8 0 0 1 2 .9l2.2-.7 2 3.4-1.2 1.9a8 8 0 0 1 0 2.1Z" transform="translate(-1 -2) scale(1.08)" /></>}
       </svg>
       <span>{label}</span>

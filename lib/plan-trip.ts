@@ -1,6 +1,6 @@
 import { calculateLeaveTime, defaultBuffer, toTomTomTravelMode } from "@/lib/leave-time";
 import type { LearnedSafetyMargin } from "@/lib/calibration";
-import { rainAtDeparture, rainPenaltyMinutes, weatherAroundDeparture } from "@/lib/weather";
+import { rainAtDeparture, rainPenaltyMinutes, weatherAroundDeparture, weatherAtDeparture } from "@/lib/weather";
 import type { HourlyRainForecast } from "@/lib/weather";
 import type { Importance, LeavePlan, Place, TravelMode, TripRequest, WeatherStatus } from "@/lib/trip";
 
@@ -46,14 +46,14 @@ async function getTomTomDuration(input: TripRequest, departAt: string, key: stri
   return seconds / 60;
 }
 
-async function getOpenMeteoRain(origin: Place): Promise<HourlyRainForecast | null> {
+async function getOpenMeteoForecast(origin: Place): Promise<HourlyRainForecast | null> {
   if (origin.label.toLowerCase().endsWith("(sample location)")) return null;
 
   try {
     const url = new URL("https://api.open-meteo.com/v1/forecast");
     url.searchParams.set("latitude", String(origin.lat));
     url.searchParams.set("longitude", String(origin.lon));
-    url.searchParams.set("hourly", "rain,showers");
+    url.searchParams.set("hourly", "rain,showers,weather_code,temperature_2m,precipitation_probability,is_day");
     url.searchParams.set("timezone", "GMT");
     url.searchParams.set("forecast_days", "16");
     const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(5_000) });
@@ -67,6 +67,19 @@ async function getOpenMeteoRain(origin: Place): Promise<HourlyRainForecast | nul
         !time.every((value: unknown) => typeof value === "string") ||
         rain.length !== time.length || showers.length !== time.length) return null;
 
+    const weatherCode = Array.isArray(data.hourly.weather_code) && data.hourly.weather_code.length === time.length
+      ? data.hourly.weather_code.map((value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : null)
+      : undefined;
+    const temperatureC = Array.isArray(data.hourly.temperature_2m) && data.hourly.temperature_2m.length === time.length
+      ? data.hourly.temperature_2m.map((value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : null)
+      : undefined;
+    const precipitationProbability = Array.isArray(data.hourly.precipitation_probability) && data.hourly.precipitation_probability.length === time.length
+      ? data.hourly.precipitation_probability.map((value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : null)
+      : undefined;
+    const isDay = Array.isArray(data.hourly.is_day) && data.hourly.is_day.length === time.length
+      ? data.hourly.is_day.map((value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : null)
+      : undefined;
+
     return {
       time,
       // Add rain and showers but leave snow out of this rain-only adjustment.
@@ -75,6 +88,10 @@ async function getOpenMeteoRain(origin: Place): Promise<HourlyRainForecast | nul
         return typeof value === "number" && Number.isFinite(value) &&
           typeof shower === "number" && Number.isFinite(shower) ? value + shower : null;
       }),
+      weatherCode,
+      temperatureC,
+      precipitationProbability,
+      isDay,
     };
   } catch {
     return null;
@@ -122,7 +139,7 @@ export async function planTrip(trip: TripRequest, learnedSafetyMargin?: LearnedS
 
   const effectiveMargin = source === "tomtom" ? learnedSafetyMargin ?? undefined : undefined;
   const basePlan = calculateLeaveTime({ ...trip, durationMinutes, fixedBufferMinutes: buffer, learnedSafetyMargin: effectiveMargin });
-  const forecast = await getOpenMeteoRain(trip.origin);
+  const forecast = await getOpenMeteoForecast(trip.origin);
   let weatherStatus = rainAtDeparture(forecast, basePlan.leaveAt);
   let weatherPenaltyMinutes = rainPenaltyMinutes(trip.mode, weatherStatus);
   if (weatherPenaltyMinutes > 0) {
@@ -144,5 +161,6 @@ export async function planTrip(trip: TripRequest, learnedSafetyMargin?: LearnedS
     explanation: `${plan.durationMinutes} min travel + ${plan.safetyMarginMinutes} min ${plan.safetyMarginMethod} safety + ${plan.fixedBufferMinutes} min ${trip.mode} buffer. ${weatherEffect}`,
     source,
     weatherStatus,
+    departureWeather: weatherAtDeparture(forecast, plan.leaveAt),
   };
 }
