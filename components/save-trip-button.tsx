@@ -76,6 +76,7 @@ export default function SaveTripButton({ trip, historyResiduals }: { trip: TripR
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Could not save this trip.");
       setSaved(true);
+      setIsError(data.confirmationSent === false);
       setMessage(data.message);
     } catch (reason) {
       setIsError(true);
@@ -93,7 +94,7 @@ export default function SaveTripButton({ trip, historyResiduals }: { trip: TripR
         disabled={busy || saved}
         className="w-full rounded-xl border border-emerald-200 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/15 disabled:opacity-60"
       >
-        {busy ? "Saving trip and setting reminders…" : saved ? "Reminders enabled" : "Remind me"}
+        {busy ? "Saving trip and setting reminders…" : saved ? (isError ? "Trip saved" : "Reminders enabled") : "Remind me"}
       </button>
       {message && <p className={`mt-3 text-sm ${isError ? "text-rose-200" : "text-emerald-100"}`} role={isError ? "alert" : "status"}>{message}</p>}
     </div>

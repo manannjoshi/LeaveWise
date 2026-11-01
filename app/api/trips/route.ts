@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { planTrip } from "@/lib/plan-trip";
 import { getLearnedSafetyMargin, validResidualsFromRequest } from "@/lib/calibration";
+import { getWebPush } from "@/lib/push-server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { isTripRequest } from "@/lib/validate-trip";
 
@@ -165,11 +166,35 @@ export async function POST(request: Request) {
   }
 
   const scheduledChecks = checkpoints.filter((checkpoint) => checkpoint.status === "pending").length;
+  let confirmationSent = false;
+  try {
+    await getWebPush().sendNotification({
+      endpoint: subscription.endpoint,
+      keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth },
+    }, JSON.stringify({
+      title: "Reminders are on",
+      body: "LeaveWise will check your trip and send an update before you leave.",
+      tripId: savedTrip.id,
+      url: "/",
+    }), { TTL: 300 });
+    confirmationSent = true;
+  } catch (error) {
+    console.error("Could not send reminder confirmation", error instanceof Error ? error.message : "Unknown error");
+    const statusCode = (error as { statusCode?: number }).statusCode;
+    if (statusCode === 404 || statusCode === 410) {
+      const now = new Date().toISOString();
+      await supabase.from("push_subscriptions").update({ disabled_at: now }).eq("id", savedSubscription.id);
+      await supabase.from("trips").update({ status: "cancelled", updated_at: now }).eq("id", savedTrip.id);
+      await supabase.from("trip_rechecks").update({ status: "cancelled", processed_at: now }).eq("trip_id", savedTrip.id).eq("status", "pending");
+    }
+  }
+
   return NextResponse.json({
     tripId: savedTrip.id,
     scheduledChecks,
-    message: scheduledChecks > 0
-      ? `Trip saved with ${scheduledChecks} scheduled re-check${scheduledChecks === 1 ? "" : "s"}.`
-      : "Trip saved, but all three reminder times have passed.",
+    confirmationSent,
+    message: confirmationSent
+      ? `Reminders are on. You'll get ${scheduledChecks > 0 ? `${scheduledChecks} trip check${scheduledChecks === 1 ? "" : "s"} before you leave.` : "no further trip checks because the planned leave time is too close."}`
+      : "Trip saved, but the confirmation notification could not be sent. Check notification settings before relying on reminders.",
   }, { status: 201 });
 }
